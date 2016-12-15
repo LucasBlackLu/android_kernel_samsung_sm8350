@@ -1461,7 +1461,7 @@ void create_tcon_mdnie_node(struct samsung_display_driver_data *vdd)
 
 	/* MODE MAX */
 	if (device_create_file(tune_mdnie_dev, &dev_attr_mode_max) < 0)
-		DPRINT("Failed to create device file(%s)!\n", dev_attr_mode_max.attr.name);
+		DPRINT(vdd, "[mDNIe] Failed to create device file(%s)!\n", dev_attr_mode_max.attr.name);
 
 	/* OUTDOOR */
 	if (device_create_file(tune_mdnie_dev, &dev_attr_outdoor) < 0)
