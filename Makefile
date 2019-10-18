@@ -1347,10 +1347,10 @@ headers: $(version_h) scripts_unifdef uapi-asm-generic archheaders archscripts
 		$(MAKE) $(hdr-inst)=$$d/include/uapi; \
 	done
 
-# Deprecated. It is no-op now.
 PHONY += headers_check
-headers_check:
-	@:
+headers_check: headers
+	$(Q)$(MAKE) $(hdr-inst)=include/uapi HDRCHECK=1
+	$(Q)$(MAKE) $(hdr-inst)=arch/$(SRCARCH)/include/uapi HDRCHECK=1
 	$(Q)for d in $(techpack-dirs); do \
 		$(MAKE) $(hdr-inst)=$$d/include/uapi HDRCHECK=1; \
 	done
