@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-#! /usr/bin/env python3
-=======
 #! /usr/bin/env python
->>>>>>> 57278237fe63 (scripts: Package DTBOs into dtbo.img using mkdtboimg)
 # Copyright 2017, The Android Open Source Project
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1022,11 +1018,7 @@ def print_usage(cmd, _):
 def main():
     """Main entry point for mkdtboimg."""
 
-<<<<<<< HEAD
-    parser = argparse.ArgumentParser()
-=======
     parser = argparse.ArgumentParser(prog='mkdtboimg.py')
->>>>>>> 57278237fe63 (scripts: Package DTBOs into dtbo.img using mkdtboimg)
 
     subparser = parser.add_subparsers(title='subcommand',
                                       description='Valid subcommands')
@@ -1057,8 +1049,4 @@ def main():
     subcmd.func(subcmd.argfile, subcmd_args)
 
 if __name__ == '__main__':
-<<<<<<< HEAD
     main()
-=======
-    main()
->>>>>>> 57278237fe63 (scripts: Package DTBOs into dtbo.img using mkdtboimg)
