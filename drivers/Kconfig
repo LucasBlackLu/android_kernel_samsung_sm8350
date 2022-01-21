@@ -260,8 +260,6 @@ source "drivers/input/wacom/Kconfig"
 
 source "drivers/knox/Kconfig"
 
-source "drivers/kperfmon/Kconfig"
-
 source "drivers/mfd/maxim/Kconfig"
 
 source "drivers/misc/drb/Kconfig"

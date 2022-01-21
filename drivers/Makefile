@@ -206,7 +206,6 @@ obj-y += input/misc/hall/
 obj-y += input/sec_input/
 obj-y += input/sec_input/slsi/
 obj-y += knox/
-obj-y += kperfmon/
 obj-y += mfd/maxim/
 obj-y += misc/drb/
 obj-y += muic/common/
