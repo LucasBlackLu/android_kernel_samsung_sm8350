@@ -287,10 +287,6 @@ struct dsi_panel {
 	struct device_node *test_mode_of_node;
 	struct dsi_parser_utils test_mode_utils;
 #endif
-	struct brightness_alpha_pair *fod_dim_lut;
-	unsigned int fod_dim_lut_len;
-	u8 fod_dim_alpha;
-	bool fod_hbm_enabled;
 };
 
 static inline bool dsi_panel_ulps_feature_enabled(struct dsi_panel *panel)
@@ -438,5 +434,7 @@ int __ss_dsi_panel_parse_cmd_sets(struct dsi_panel_cmd_set *cmd,
 					int type, struct dsi_parser_utils *utils,
 					char (*ss_cmd_set_prop)[SS_CMD_PROP_STR_LEN]);
 #endif
+
+u32 dsi_panel_get_fod_dim_alpha(struct dsi_panel *panel);
 
 #endif /* _DSI_PANEL_H_ */
