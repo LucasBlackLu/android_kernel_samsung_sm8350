@@ -19,17 +19,22 @@ ifeq ($(CONFIG_ARCH_KONA), y)
 include $(srctree)/techpack/audio/config/konaauto.conf
 endif
 ifeq ($(CONFIG_ARCH_LAHAINA), y)
-ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),o1q t2q p3q))
+ifneq ($(filter y, $(CONFIG_SEC_O1Q_PROJECT) $(CONFIG_SEC_T2Q_PROJECT) $(CONFIG_SEC_P3Q_PROJECT)),)
 include $(srctree)/techpack/audio/config/lahaina_palette.conf
-else ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),q2q))
+
+else ifeq ($(CONFIG_SEC_Q2Q_PROJECT), y)
 include $(srctree)/techpack/audio/config/lahaina_nexttop.conf
-else ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),b2q))
+
+else ifeq ($(CONFIG_SEC_B2Q_PROJECT), y)
 include $(srctree)/techpack/audio/config/lahaina_b2.conf
-else ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),r9q))
+
+else ifeq ($(CONFIG_SEC_R9Q_PROJECT), y)
 include $(srctree)/techpack/audio/config/lahaina_r9.conf
-else ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),v2q))
+
+else ifeq ($(CONFIG_SEC_V2Q_PROJECT), y)
 include $(srctree)/techpack/audio/config/lahaina_v2.conf
-else ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),m44x))
+
+else ifeq ($(CONFIG_SEC_M44X_PROJECT), y)
 include $(srctree)/techpack/audio/config/lahaina_m44.conf
 else
 include $(srctree)/techpack/audio/config/lahainaauto.conf
@@ -81,23 +86,23 @@ LINUXINCLUDE    += \
                 -include $(srctree)/techpack/audio/config/konaautoconf.h
 endif
 ifeq ($(CONFIG_ARCH_LAHAINA), y)
-ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),o1q t2q p3q))
+ifneq ($(filter y, $(CONFIG_SEC_O1Q_PROJECT) $(CONFIG_SEC_T2Q_PROJECT) $(CONFIG_SEC_P3Q_PROJECT)),)
 LINUXINCLUDE    += \
                 -include $(srctree)/techpack/audio/config/lahaina_palette.h
-else ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),q2q))
+else ifeq ($(CONFIG_SEC_Q2Q_PROJECT), y)
 LINUXINCLUDE    += \
                 -include $(srctree)/techpack/audio/config/lahaina_nexttop.h
-else ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),b2q))
+else ifeq ($(CONFIG_SEC_B2Q_PROJECT), y)
 LINUXINCLUDE    += \
                 -include $(srctree)/techpack/audio/config/lahaina_b2.h
-else ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),r9q))
-LINUXINCLUDE	+= \
+else ifeq ($(CONFIG_SEC_R9Q_PROJECT), y)
+LINUXINCLUDE    += \
                 -include $(srctree)/techpack/audio/config/lahaina_r9.h
-else ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),v2q))
-LINUXINCLUDE	+= \
+else ifeq ($(CONFIG_SEC_V2Q_PROJECT), y)
+LINUXINCLUDE    += \
                 -include $(srctree)/techpack/audio/config/lahaina_v2.h
-else ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),m44x))
-LINUXINCLUDE	+= \
+else ifeq ($(CONFIG_SEC_M44X_PROJECT), y)
+LINUXINCLUDE    += \
                 -include $(srctree)/techpack/audio/config/lahaina_m44.h
 else
 LINUXINCLUDE    += \
