@@ -32,6 +32,7 @@
 #include <linux/ratelimit.h>
 #include <linux/debugfs.h>
 #include <linux/sysfs.h>
+#include <linux/panic_logstore.h>
 #include <asm/sections.h>
 
 #include <linux/sec_debug.h>
@@ -304,6 +305,19 @@ void panic(const char *fmt, ...)
 	sec_debug_summary_save_panic_info(buf,
 			(unsigned long)__builtin_return_address(0));
 #endif
+
+
+	/**
+	 * Dump the log before forcibly shutting down other CPUs because the
+	 * related interrupts (e.g. UFS controller) could be running on them.
+	 * We have no chance to migrate them in this critical context. Simply
+	 * dump the log here although it doesn't give full information, but
+	 * it's useful enough.
+	 */
+	local_irq_enable();
+	do_logstore();
+	mdelay(1000);
+	local_irq_disable();
 
 	/*
 	 * If kgdb is enabled, give it a chance to run before we stop all
