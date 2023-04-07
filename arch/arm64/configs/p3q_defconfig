@@ -486,9 +486,9 @@ CONFIG_TLB_CONF_HANDLER=y
 #
 # Hypervisor
 #
-CONFIG_FASTUH=y
-CONFIG_FASTUH_RKP=y
-CONFIG_FASTUH_KDP=y
+# CONFIG_FASTUH is not set
+# CONFIG_FASTUH_RKP is not set
+# CONFIG_FASTUH_KDP is not set
 # end of Hypervisor
 
 #
@@ -1394,7 +1394,7 @@ CONFIG_QRTR_MHI=y
 CONFIG_QRTR_HAVEN=y
 # CONFIG_QRTR_WS_DEBUG is not set
 # CONFIG_NET_NCSI is not set
-CONFIG_KNOX_NCM=y
+# CONFIG_KNOX_NCM is nto set
 CONFIG_RPS=y
 CONFIG_RFS_ACCEL=y
 CONFIG_XPS=y
@@ -6872,7 +6872,6 @@ CONFIG_INIT_ON_ALLOC_DEFAULT_ON=y
 # end of Memory initialization
 # end of Kernel hardening options
 
-CONFIG_SECURITY_DEFEX=y
 # CONFIG_DEFEX_KERNEL_ONLY is not set
 # CONFIG_SECURITY_DEFEX_USER is not set
 # CONFIG_PROCA is not set
