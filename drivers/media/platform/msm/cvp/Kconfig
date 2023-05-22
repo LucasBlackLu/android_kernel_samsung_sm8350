@@ -5,6 +5,6 @@
 
 menuconfig MSM_CVP
 	tristate "MSM CVP driver"
-        help
+	help
           Enable support of MSM CVP driver for
           Qualcomm Technologies, Inc.
