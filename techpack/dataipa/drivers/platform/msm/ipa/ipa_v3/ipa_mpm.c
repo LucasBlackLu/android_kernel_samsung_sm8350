@@ -536,7 +536,7 @@ static int ipa_mpm_set_dma_mode(enum ipa_client_type src_pipe,
 	ep_cfg.mode.dst = dst_pipe;
 	ep_cfg.seq.set_dynamic = true;
 
-	result = ipa_cfg_ep(ipa_get_ep_mapping(src_pipe), &ep_cfg);
+	result = ipa3_cfg_ep(ipa_get_ep_mapping(src_pipe), &ep_cfg);
 	IPA_MPM_FUNC_EXIT();
 
 destroy_imm_cmd:
