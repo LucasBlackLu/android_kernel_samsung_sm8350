@@ -43,3 +43,6 @@ source "techpack/display/msm/samsung/S6E3FAB_AMB624XT01/Kconfig" # ADDED BY LEGO
 source "techpack/display/msm/samsung/S6E3HAB_AMB677TY01/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 source "techpack/display/msm/samsung/S6E3FAB_AMB667XU01/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 source "techpack/display/msm/samsung/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+
+source "techpack/dataipa/drivers/platform/msm/ipa/Kconfig"
+source "techpack/dataipa/drivers/platform/msm/gsi/Kconfig"

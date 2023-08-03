@@ -1,0 +1,5 @@
+menuconfig GSI
+    tristate "GSI"
+    default y
+    ---help---
+        GSI support
