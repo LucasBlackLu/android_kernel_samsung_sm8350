@@ -1,0 +1,52 @@
+menuconfig IPA3
+    tristate "IPA"
+    default y
+    ---help---
+        IPA3 support
+
+menuconfig IPA_EMULATION
+    tristate "IPA Emulation"
+    default n
+    ---help---
+        IPA3 emulation support
+
+menuconfig IPA3_REGDUMP
+    tristate "IPA Regdump"
+    default n
+    ---help---
+        IPA3 regdump support
+
+menuconfig RNDIS_IPA
+    tristate "IPA RNDIS"
+    default y
+    depends on IPA3
+    ---help---
+        IPA RNDIS
+
+menuconfig IPA3_MHI_PROXY
+    tristate "IPA3 MHI Proxy"
+    default y
+    depends on IPA3
+    ---help---
+        IPA MHI proxy support
+
+menuconfig IPA3_MHI_PRIME_MANAGER
+    tristate "IPA3 MHI prime manager"
+    default y
+    depends on IPA3_MHI_PROXY
+    ---help---
+        IPA MHI prine manager
+
+menuconfig RMNET_IPA3
+    tristate "RMNET IPA"
+    default y
+    depends on IPA3
+    ---help---
+        IPA RMNET support
+
+menuconfig IPA_UT
+    tristate "IPA UT"
+    default y
+    depends on IPA3
+    ---help---
+        IPA UT support
