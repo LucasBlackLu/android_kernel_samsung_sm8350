@@ -324,6 +324,3 @@ ifdef CONFIG_AUDIO_QGKI
 obj-$(CONFIG_SND_SOC_MSM_HDMI_CODEC_RX) += hdmi_dlkm.o
 hdmi_dlkm-y := $(HDMICODEC_OBJS)
 endif
-
-obj-$(CONFIG_SND_SWR_HAPTICS) += swr_haptics_dlkm.o
-swr_haptics_dlkm-y := $(SWR_HAP_OBJS)
