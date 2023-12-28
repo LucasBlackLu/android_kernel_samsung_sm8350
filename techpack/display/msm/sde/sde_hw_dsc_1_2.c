@@ -11,51 +11,49 @@
 #include "sde_dbg.h"
 #include "sde_kms.h"
 
-
-#define DSC_CMN_MAIN_CNF           0x00
+#define DSC_CMN_MAIN_CNF 0x00
 
 /* SDE_DSC_ENC regsiter offsets */
-#define ENC_DF_CTRL                0x00
-#define ENC_GENERAL_STATUS         0x04
-#define ENC_HSLICE_STATUS          0x08
-#define ENC_OUT_STATUS             0x0C
-#define ENC_INT_STAT               0x10
-#define ENC_INT_CLR                0x14
-#define ENC_INT_MASK               0x18
-#define DSC_MAIN_CONF              0x30
-#define DSC_PICTURE_SIZE           0x34
-#define DSC_SLICE_SIZE             0x38
-#define DSC_MISC_SIZE              0x3C
-#define DSC_HRD_DELAYS             0x40
-#define DSC_RC_SCALE               0x44
-#define DSC_RC_SCALE_INC_DEC       0x48
-#define DSC_RC_OFFSETS_1           0x4C
-#define DSC_RC_OFFSETS_2           0x50
-#define DSC_RC_OFFSETS_3           0x54
-#define DSC_RC_OFFSETS_4           0x58
-#define DSC_FLATNESS_QP            0x5C
-#define DSC_RC_MODEL_SIZE          0x60
-#define DSC_RC_CONFIG              0x64
-#define DSC_RC_BUF_THRESH_0        0x68
-#define DSC_RC_BUF_THRESH_1        0x6C
-#define DSC_RC_BUF_THRESH_2        0x70
-#define DSC_RC_BUF_THRESH_3        0x74
-#define DSC_RC_MIN_QP_0            0x78
-#define DSC_RC_MIN_QP_1            0x7C
-#define DSC_RC_MIN_QP_2            0x80
-#define DSC_RC_MAX_QP_0            0x84
-#define DSC_RC_MAX_QP_1            0x88
-#define DSC_RC_MAX_QP_2             0x8C
-#define DSC_RC_RANGE_BPG_OFFSETS_0  0x90
-#define DSC_RC_RANGE_BPG_OFFSETS_1  0x94
-#define DSC_RC_RANGE_BPG_OFFSETS_2  0x98
+#define ENC_DF_CTRL 0x00
+#define ENC_GENERAL_STATUS 0x04
+#define ENC_HSLICE_STATUS 0x08
+#define ENC_OUT_STATUS 0x0C
+#define ENC_INT_STAT 0x10
+#define ENC_INT_CLR 0x14
+#define ENC_INT_MASK 0x18
+#define DSC_MAIN_CONF 0x30
+#define DSC_PICTURE_SIZE 0x34
+#define DSC_SLICE_SIZE 0x38
+#define DSC_MISC_SIZE 0x3C
+#define DSC_HRD_DELAYS 0x40
+#define DSC_RC_SCALE 0x44
+#define DSC_RC_SCALE_INC_DEC 0x48
+#define DSC_RC_OFFSETS_1 0x4C
+#define DSC_RC_OFFSETS_2 0x50
+#define DSC_RC_OFFSETS_3 0x54
+#define DSC_RC_OFFSETS_4 0x58
+#define DSC_FLATNESS_QP 0x5C
+#define DSC_RC_MODEL_SIZE 0x60
+#define DSC_RC_CONFIG 0x64
+#define DSC_RC_BUF_THRESH_0 0x68
+#define DSC_RC_BUF_THRESH_1 0x6C
+#define DSC_RC_BUF_THRESH_2 0x70
+#define DSC_RC_BUF_THRESH_3 0x74
+#define DSC_RC_MIN_QP_0 0x78
+#define DSC_RC_MIN_QP_1 0x7C
+#define DSC_RC_MIN_QP_2 0x80
+#define DSC_RC_MAX_QP_0 0x84
+#define DSC_RC_MAX_QP_1 0x88
+#define DSC_RC_MAX_QP_2 0x8C
+#define DSC_RC_RANGE_BPG_OFFSETS_0 0x90
+#define DSC_RC_RANGE_BPG_OFFSETS_1 0x94
+#define DSC_RC_RANGE_BPG_OFFSETS_2 0x98
 
 /* SDE_DSC_CTL regsiter offsets */
-#define DSC_CTL                    0x00
-#define DSC_CFG                    0x04
-#define DSC_DATA_IN_SWAP           0x08
-#define DSC_CLK_CTRL               0x0C
-
+#define DSC_CTL 0x00
+#define DSC_CFG 0x04
+#define DSC_DATA_IN_SWAP 0x08
+#define DSC_CLK_CTRL 0x0C
 
 static int _dsc_calc_ob_max_addr(struct sde_hw_dsc *hw_dsc, int num_ss)
 {
@@ -80,9 +78,9 @@ static int _dsc_calc_ob_max_addr(struct sde_hw_dsc *hw_dsc, int num_ss)
 #if defined(CONFIG_DISPLAY_SAMSUNG) && defined(CONFIG_UML)
 static inline int _dsc_subblk_offset(struct sde_hw_dsc *hw_dsc, int s_id,
 #else
-static inline _dsc_subblk_offset(struct sde_hw_dsc *hw_dsc, int s_id,
+static inline int _dsc_subblk_offset(struct sde_hw_dsc *hw_dsc, int s_id,
 #endif
-		u32 *idx)
+				     u32 *idx)
 {
 	const struct sde_dsc_sub_blks *sblk;
 
@@ -127,8 +125,8 @@ static void sde_hw_dsc_disable(struct sde_hw_dsc *hw_dsc)
 }
 
 static void sde_hw_dsc_config(struct sde_hw_dsc *hw_dsc,
-		struct msm_display_dsc_info *dsc, u32 mode,
-		bool ich_reset_override)
+			      struct msm_display_dsc_info *dsc, u32 mode,
+			      bool ich_reset_override)
 {
 	struct sde_hw_blk_reg_map *dsc_c;
 	u32 idx;
@@ -183,48 +181,48 @@ static void sde_hw_dsc_config(struct sde_hw_dsc *hw_dsc,
 	SDE_REG_WRITE(dsc_c, DSC_MAIN_CONF + idx, data);
 
 	data = (dsc->config.pic_width & 0xffff) |
-		((dsc->config.pic_height & 0xffff) << 16);
+	       ((dsc->config.pic_height & 0xffff) << 16);
 
 	SDE_REG_WRITE(dsc_c, DSC_PICTURE_SIZE + idx, data);
 
 	data = (dsc->config.slice_width & 0xffff) |
-		((dsc->config.slice_height & 0xffff) << 16);
+	       ((dsc->config.slice_height & 0xffff) << 16);
 
 	SDE_REG_WRITE(dsc_c, DSC_SLICE_SIZE + idx, data);
 
 	SDE_REG_WRITE(dsc_c, DSC_MISC_SIZE + idx,
-			(dsc->config.slice_chunk_size) & 0xffff);
+		      (dsc->config.slice_chunk_size) & 0xffff);
 
 	data = (dsc->config.initial_xmit_delay & 0xffff) |
-		((dsc->config.initial_dec_delay & 0xffff) << 16);
+	       ((dsc->config.initial_dec_delay & 0xffff) << 16);
 
 	SDE_REG_WRITE(dsc_c, DSC_HRD_DELAYS + idx, data);
 
 	SDE_REG_WRITE(dsc_c, DSC_RC_SCALE + idx,
-			dsc->config.initial_scale_value & 0x3f);
+		      dsc->config.initial_scale_value & 0x3f);
 
 	data = (dsc->config.scale_increment_interval & 0xffff) |
-		((dsc->config.scale_decrement_interval & 0x7ff) << 16);
+	       ((dsc->config.scale_decrement_interval & 0x7ff) << 16);
 
 	SDE_REG_WRITE(dsc_c, DSC_RC_SCALE_INC_DEC + idx, data);
 
 	data = (dsc->config.first_line_bpg_offset & 0x1f) |
-		((dsc->config.second_line_bpg_offset & 0x1f) << 5);
+	       ((dsc->config.second_line_bpg_offset & 0x1f) << 5);
 
 	SDE_REG_WRITE(dsc_c, DSC_RC_OFFSETS_1 + idx, data);
 
 	data = (dsc->config.nfl_bpg_offset & 0xffff) |
-		((dsc->config.slice_bpg_offset & 0xffff) << 16);
+	       ((dsc->config.slice_bpg_offset & 0xffff) << 16);
 
 	SDE_REG_WRITE(dsc_c, DSC_RC_OFFSETS_2 + idx, data);
 
 	data = (dsc->config.initial_offset & 0xffff) |
-		((dsc->config.final_offset & 0xffff) << 16);
+	       ((dsc->config.final_offset & 0xffff) << 16);
 
 	SDE_REG_WRITE(dsc_c, DSC_RC_OFFSETS_3 + idx, data);
 
 	data = (dsc->config.nsl_bpg_offset & 0xffff) |
-		((dsc->config.second_line_offset_adj & 0xffff) << 16);
+	       ((dsc->config.second_line_offset_adj & 0xffff) << 16);
 
 	SDE_REG_WRITE(dsc_c, DSC_RC_OFFSETS_4 + idx, data);
 
@@ -235,7 +233,7 @@ static void sde_hw_dsc_config(struct sde_hw_dsc *hw_dsc,
 	SDE_REG_WRITE(dsc_c, DSC_FLATNESS_QP + idx, data);
 
 	SDE_REG_WRITE(dsc_c, DSC_RC_MODEL_SIZE + idx,
-			(dsc->config.rc_model_size) & 0xffff);
+		      (dsc->config.rc_model_size) & 0xffff);
 
 	data = dsc->config.rc_edge_factor & 0xf;
 	data |= (dsc->config.rc_quant_incr_limit0 & 0x1f) << 8;
@@ -274,7 +272,7 @@ static void sde_hw_dsc_config(struct sde_hw_dsc *hw_dsc,
 }
 
 static void sde_hw_dsc_config_thresh(struct sde_hw_dsc *hw_dsc,
-		struct msm_display_dsc_info *dsc)
+				     struct msm_display_dsc_info *dsc)
 {
 	struct sde_hw_blk_reg_map *dsc_c;
 	u32 idx, off;
@@ -293,11 +291,11 @@ static void sde_hw_dsc_config_thresh(struct sde_hw_dsc *hw_dsc,
 
 	off = 0;
 	for (i = 0; i < DSC_NUM_BUF_RANGES - 1; i++) {
-		data |= dsc->config.rc_buf_thresh[i] << (8*j);
+		data |= dsc->config.rc_buf_thresh[i] << (8 * j);
 		j++;
 		if ((j == 4) || (i == DSC_NUM_BUF_RANGES - 2)) {
 			SDE_REG_WRITE(dsc_c, DSC_RC_BUF_THRESH_0 + idx + off,
-					data);
+				      data);
 			off += 4;
 			j = 0;
 			data = 0;
@@ -306,18 +304,18 @@ static void sde_hw_dsc_config_thresh(struct sde_hw_dsc *hw_dsc,
 
 	off = 0;
 	for (i = 0; i < DSC_NUM_BUF_RANGES; i++) {
-		min_qp |= (rc[i].range_min_qp & 0x1f) << 5*j;
-		max_qp |= (rc[i].range_max_qp & 0x1f) << 5*j;
-		bpg_off |= (rc[i].range_bpg_offset & 0x3f) << 6*j;
+		min_qp |= (rc[i].range_min_qp & 0x1f) << 5 * j;
+		max_qp |= (rc[i].range_max_qp & 0x1f) << 5 * j;
+		bpg_off |= (rc[i].range_bpg_offset & 0x3f) << 6 * j;
 		j++;
 		if (j == 5) {
 			SDE_REG_WRITE(dsc_c, DSC_RC_MIN_QP_0 + idx + off,
-					min_qp);
+				      min_qp);
 			SDE_REG_WRITE(dsc_c, DSC_RC_MAX_QP_0 + idx + off,
-					max_qp);
+				      max_qp);
 			SDE_REG_WRITE(dsc_c,
-					DSC_RC_RANGE_BPG_OFFSETS_0 + idx + off,
-					bpg_off);
+				      DSC_RC_RANGE_BPG_OFFSETS_0 + idx + off,
+				      bpg_off);
 			off += 4;
 			j = 0;
 			min_qp = 0;
@@ -327,10 +325,8 @@ static void sde_hw_dsc_config_thresh(struct sde_hw_dsc *hw_dsc,
 	}
 }
 
-static void sde_hw_dsc_bind_pingpong_blk(
-		struct sde_hw_dsc *hw_dsc,
-		bool enable,
-		const enum sde_pingpong pp)
+static void sde_hw_dsc_bind_pingpong_blk(struct sde_hw_dsc *hw_dsc, bool enable,
+					 const enum sde_pingpong pp)
 {
 	struct sde_hw_blk_reg_map *dsc_c;
 	int idx;
@@ -350,11 +346,10 @@ static void sde_hw_dsc_bind_pingpong_blk(
 }
 
 void sde_dsc1_2_setup_ops(struct sde_hw_dsc_ops *ops,
-		const unsigned long features)
+			  const unsigned long features)
 {
 	ops->dsc_disable = sde_hw_dsc_disable;
 	ops->dsc_config = sde_hw_dsc_config;
 	ops->dsc_config_thresh = sde_hw_dsc_config_thresh;
 	ops->bind_pingpong_blk = sde_hw_dsc_bind_pingpong_blk;
 }
-
