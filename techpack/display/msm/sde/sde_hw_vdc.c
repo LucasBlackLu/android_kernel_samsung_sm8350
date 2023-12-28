@@ -13,63 +13,63 @@
 #include "sde_hw_vdc.h"
 #include "sde_vdc_helper.h"
 
-#define VDC_CMN_MAIN_CNF           0x00
+#define VDC_CMN_MAIN_CNF 0x00
 
 /* SDE_VDC_ENC register offsets */
-#define ENC_OUT_BF_CTRL            0x00
-#define ENC_GENERAL_STATUS         0x04
-#define ENC_HSLICE_STATUS          0x08
-#define ENC_OUT_STATUS             0x0C
-#define ENC_INT_STAT               0x10
-#define ENC_INT_CLR                0x14
-#define ENC_INT_ENABLE             0x18
-#define ENC_R2B_BUF_CTRL           0x1c
-#define ENC_ORIG_SLICE             0x40
-#define ENC_DF_CTRL                0x44
-#define ENC_VDC_VERSION            0x80
-#define ENC_VDC_FRAME_SIZE         0x84
-#define ENC_VDC_SLICE_SIZE         0x88
-#define ENC_VDC_SLICE_PX           0x8c
-#define ENC_VDC_MAIN_CONF          0x90
-#define ENC_VDC_CHUNK_SIZE         0x94
-#define ENC_VDC_RC_CONFIG_0        0x98
-#define ENC_VDC_RC_CONFIG_1        0x9c
-#define ENC_VDC_RC_CONFIG_2        0xa0
-#define ENC_VDC_RC_CONFIG_3        0xa4
-#define ENC_VDC_RC_CONFIG_4        0xa8
-#define ENC_VDC_FLAT_CONFIG        0xac
-#define ENC_VDC_FLAT_LUT_3_0       0xb0
-#define ENC_VDC_FLAT_LUT_7_4       0xb4
-#define ENC_VDC_MAX_QP_LUT_3_0     0xb8
-#define ENC_VDC_MAX_QP_LUT_7_4     0xbc
-#define ENC_VDC_TAR_RATE_LUT_3_0   0xc0
-#define ENC_VDC_TAR_RATE_LUT_7_4   0xc4
-#define ENC_VDC_TAR_RATE_LUT_11_8  0xc8
+#define ENC_OUT_BF_CTRL 0x00
+#define ENC_GENERAL_STATUS 0x04
+#define ENC_HSLICE_STATUS 0x08
+#define ENC_OUT_STATUS 0x0C
+#define ENC_INT_STAT 0x10
+#define ENC_INT_CLR 0x14
+#define ENC_INT_ENABLE 0x18
+#define ENC_R2B_BUF_CTRL 0x1c
+#define ENC_ORIG_SLICE 0x40
+#define ENC_DF_CTRL 0x44
+#define ENC_VDC_VERSION 0x80
+#define ENC_VDC_FRAME_SIZE 0x84
+#define ENC_VDC_SLICE_SIZE 0x88
+#define ENC_VDC_SLICE_PX 0x8c
+#define ENC_VDC_MAIN_CONF 0x90
+#define ENC_VDC_CHUNK_SIZE 0x94
+#define ENC_VDC_RC_CONFIG_0 0x98
+#define ENC_VDC_RC_CONFIG_1 0x9c
+#define ENC_VDC_RC_CONFIG_2 0xa0
+#define ENC_VDC_RC_CONFIG_3 0xa4
+#define ENC_VDC_RC_CONFIG_4 0xa8
+#define ENC_VDC_FLAT_CONFIG 0xac
+#define ENC_VDC_FLAT_LUT_3_0 0xb0
+#define ENC_VDC_FLAT_LUT_7_4 0xb4
+#define ENC_VDC_MAX_QP_LUT_3_0 0xb8
+#define ENC_VDC_MAX_QP_LUT_7_4 0xbc
+#define ENC_VDC_TAR_RATE_LUT_3_0 0xc0
+#define ENC_VDC_TAR_RATE_LUT_7_4 0xc4
+#define ENC_VDC_TAR_RATE_LUT_11_8 0xc8
 #define ENC_VDC_TAR_RATE_LUT_15_12 0xcc
-#define ENC_VDC_MPPF_CONFIG        0xd0
-#define ENC_VDC_SSM_CONFIG         0xd4
-#define ENC_VDC_SLICE_NUM_BITS_0   0xd8
-#define ENC_VDC_SLICE_NUM_BITS_1   0xdc
-#define ENC_VDC_RC_PRECOMPUTE      0xe0
-#define ENC_VDC_MPP_CONFIG         0xe4
-#define ENC_VDC_LBDA_BRATE_LUT     0x100
-#define ENC_VDC_LBDA_BF_LUT        0x180
-#define ENC_VDC_OTHER_RC           0x1c0
+#define ENC_VDC_MPPF_CONFIG 0xd0
+#define ENC_VDC_SSM_CONFIG 0xd4
+#define ENC_VDC_SLICE_NUM_BITS_0 0xd8
+#define ENC_VDC_SLICE_NUM_BITS_1 0xdc
+#define ENC_VDC_RC_PRECOMPUTE 0xe0
+#define ENC_VDC_MPP_CONFIG 0xe4
+#define ENC_VDC_LBDA_BRATE_LUT 0x100
+#define ENC_VDC_LBDA_BF_LUT 0x180
+#define ENC_VDC_OTHER_RC 0x1c0
 
 /* SDE_VDC_CTL register offsets */
-#define VDC_CTL                    0x00
-#define VDC_CFG                    0x04
-#define VDC_DATA_IN_SWAP           0x08
-#define VDC_CLK_CTRL               0x0C
+#define VDC_CTL 0x00
+#define VDC_CFG 0x04
+#define VDC_DATA_IN_SWAP 0x08
+#define VDC_CLK_CTRL 0x0C
 
-#define VDC_CTL_BLOCK_SIZE         0x300
+#define VDC_CTL_BLOCK_SIZE 0x300
 
 #if defined(CONFIG_DISPLAY_SAMSUNG) && defined(CONFIG_UML)
 static inline int _vdc_subblk_offset(struct sde_hw_vdc *hw_vdc, int s_id,
 #else
-static inline _vdc_subblk_offset(struct sde_hw_vdc *hw_vdc, int s_id,
+static inline int _vdc_subblk_offset(struct sde_hw_vdc *hw_vdc, int s_id,
 #endif
-		u32 *idx)
+				     u32 *idx)
 {
 	int rc = 0;
 	const struct sde_vdc_sub_blks *sblk;
@@ -112,7 +112,7 @@ static void sde_hw_vdc_disable(struct sde_hw_vdc *hw_vdc)
 }
 
 static void sde_hw_vdc_config(struct sde_hw_vdc *hw_vdc,
-	struct msm_display_vdc_info *vdc)
+			      struct msm_display_vdc_info *vdc)
 {
 	struct sde_hw_blk_reg_map *vdc_reg = &hw_vdc->hw;
 	u32 idx;
@@ -159,11 +159,10 @@ static void sde_hw_vdc_config(struct sde_hw_vdc *hw_vdc,
 
 	data = 0;
 	data |= (vdc->slice_width << 16);
-	data |=  vdc->slice_height;
+	data |= vdc->slice_height;
 	SDE_REG_WRITE(vdc_reg, ENC_VDC_SLICE_SIZE + idx, data);
 
-	SDE_REG_WRITE(vdc_reg, ENC_VDC_SLICE_PX + idx,
-		vdc->slice_num_px);
+	SDE_REG_WRITE(vdc_reg, ENC_VDC_SLICE_PX + idx, vdc->slice_num_px);
 
 	data = 0;
 	data |= (vdc->bits_per_pixel << 16);
@@ -176,14 +175,12 @@ static void sde_hw_vdc_config(struct sde_hw_vdc *hw_vdc,
 	data |= (bits_per_component << 4);
 	data |= (vdc->source_color_space << 2);
 	data |= vdc->chroma_format;
-	SDE_REG_WRITE(vdc_reg, ENC_VDC_MAIN_CONF + idx,
-		data);
+	SDE_REG_WRITE(vdc_reg, ENC_VDC_MAIN_CONF + idx, data);
 
-	SDE_REG_WRITE(vdc_reg, ENC_VDC_CHUNK_SIZE + idx,
-		vdc->chunk_size);
+	SDE_REG_WRITE(vdc_reg, ENC_VDC_CHUNK_SIZE + idx, vdc->chunk_size);
 
 	SDE_REG_WRITE(vdc_reg, ENC_VDC_RC_CONFIG_0 + idx,
-		vdc->rc_buffer_init_size);
+		      vdc->rc_buffer_init_size);
 
 	data = 0;
 	data |= (vdc->rc_stuffing_bits << 24);
@@ -192,7 +189,7 @@ static void sde_hw_vdc_config(struct sde_hw_vdc *hw_vdc,
 	SDE_REG_WRITE(vdc_reg, ENC_VDC_RC_CONFIG_1 + idx, data);
 
 	SDE_REG_WRITE(vdc_reg, ENC_VDC_RC_CONFIG_2 + idx,
-		vdc->rc_target_rate_threshold);
+		      vdc->rc_target_rate_threshold);
 
 	data = 0;
 	data |= (vdc->rc_tar_rate_scale << 24);
@@ -279,17 +276,16 @@ static void sde_hw_vdc_config(struct sde_hw_vdc *hw_vdc,
 	data |= vdc->mppf_bpc_cg;
 	SDE_REG_WRITE(vdc_reg, ENC_VDC_MPPF_CONFIG + idx, data);
 
-	SDE_REG_WRITE(vdc_reg, ENC_VDC_SSM_CONFIG + idx,
-			SSM_MAX_SE_SIZE);
+	SDE_REG_WRITE(vdc_reg, ENC_VDC_SSM_CONFIG + idx, SSM_MAX_SE_SIZE);
 
 	slice_num_bits_ldw = (u32)vdc->slice_num_bits;
 	slice_num_bits_ub = vdc->slice_num_bits >> 32;
 
 	SDE_REG_WRITE(vdc_reg, ENC_VDC_SLICE_NUM_BITS_0 + idx,
-			(slice_num_bits_ub & 0x0ff));
+		      (slice_num_bits_ub & 0x0ff));
 
 	SDE_REG_WRITE(vdc_reg, ENC_VDC_SLICE_NUM_BITS_1 + idx,
-			slice_num_bits_ldw);
+		      slice_num_bits_ldw);
 
 	data = 0;
 	data |= (vdc->chunk_adj_bits << 16);
@@ -301,9 +297,8 @@ static void sde_hw_vdc_config(struct sde_hw_vdc *hw_vdc,
 		data |= (vdc->lbda_brate_lut_interp[i] << 16);
 		data |= vdc->lbda_brate_lut_interp[i + 1];
 		SDE_REG_WRITE(vdc_reg,
-			ENC_VDC_LBDA_BRATE_LUT + idx +
-			(addr_off * 4),
-			data);
+			      ENC_VDC_LBDA_BRATE_LUT + idx + (addr_off * 4),
+			      data);
 		addr_off++;
 	}
 
@@ -313,15 +308,13 @@ static void sde_hw_vdc_config(struct sde_hw_vdc *hw_vdc,
 		data |= (vdc->lbda_bf_lut_interp[i + 1] << 16);
 		data |= (vdc->lbda_bf_lut_interp[i + 2] << 8);
 		data |= vdc->lbda_bf_lut_interp[i + 3];
-		SDE_REG_WRITE(vdc_reg, ENC_VDC_LBDA_BF_LUT + idx + i,
-				data);
+		SDE_REG_WRITE(vdc_reg, ENC_VDC_LBDA_BF_LUT + idx + i, data);
 	}
 
 	data = 0;
 	data |= (vdc->min_block_bits << 16);
 	data |= vdc->rc_lambda_bitrate_scale;
-	SDE_REG_WRITE(vdc_reg, ENC_VDC_OTHER_RC + idx,
-			data);
+	SDE_REG_WRITE(vdc_reg, ENC_VDC_OTHER_RC + idx, data);
 	/* program the vdc wrapper */
 	if (_vdc_subblk_offset(hw_vdc, SDE_VDC_CTL, &idx))
 		return;
@@ -338,10 +331,8 @@ static void sde_hw_vdc_config(struct sde_hw_vdc *hw_vdc,
 	SDE_REG_WRITE(vdc_reg, VDC_CFG + idx, data);
 }
 
-static void sde_hw_vdc_bind_pingpong_blk(
-		struct sde_hw_vdc *hw_vdc,
-		bool enable,
-		const enum sde_pingpong pp)
+static void sde_hw_vdc_bind_pingpong_blk(struct sde_hw_vdc *hw_vdc, bool enable,
+					 const enum sde_pingpong pp)
 {
 	struct sde_hw_blk_reg_map *vdc_reg;
 	int idx;
@@ -360,10 +351,9 @@ static void sde_hw_vdc_bind_pingpong_blk(
 	SDE_REG_WRITE(vdc_reg, VDC_CTL + idx, mux_cfg);
 }
 
-static struct sde_vdc_cfg *_vdc_offset(enum sde_vdc vdc,
-		struct sde_mdss_cfg *m,
-		void __iomem *addr,
-		struct sde_hw_blk_reg_map *b)
+static struct sde_vdc_cfg *_vdc_offset(enum sde_vdc vdc, struct sde_mdss_cfg *m,
+				       void __iomem *addr,
+				       struct sde_hw_blk_reg_map *b)
 {
 	int i;
 
@@ -381,8 +371,7 @@ static struct sde_vdc_cfg *_vdc_offset(enum sde_vdc vdc,
 	return NULL;
 }
 
-static void _setup_vdc_ops(struct sde_hw_vdc_ops *ops,
-		unsigned long features)
+static void _setup_vdc_ops(struct sde_hw_vdc_ops *ops, unsigned long features)
 {
 	ops->vdc_disable = sde_hw_vdc_disable;
 	ops->vdc_config = sde_hw_vdc_config;
@@ -394,9 +383,8 @@ static struct sde_hw_blk_ops sde_hw_ops = {
 	.stop = NULL,
 };
 
-struct sde_hw_vdc *sde_hw_vdc_init(enum sde_vdc idx,
-		void __iomem *addr,
-		struct sde_mdss_cfg *m)
+struct sde_hw_vdc *sde_hw_vdc_init(enum sde_vdc idx, void __iomem *addr,
+				   struct sde_mdss_cfg *m)
 {
 	struct sde_hw_vdc *c;
 	struct sde_vdc_cfg *cfg;
@@ -432,27 +420,24 @@ struct sde_hw_vdc *sde_hw_vdc_init(enum sde_vdc idx,
 	}
 
 	sde_dbg_reg_register_dump_range(SDE_DBG_NAME, cfg->name, c->hw.blk_off,
-		c->hw.blk_off + c->hw.length, c->hw.xin_id);
+					c->hw.blk_off + c->hw.length,
+					c->hw.xin_id);
 
-	snprintf(blk_name, sizeof(blk_name), "vdc_enc_%u",
-			c->idx - VDC_0);
+	snprintf(blk_name, sizeof(blk_name), "vdc_enc_%u", c->idx - VDC_0);
 
-	sde_dbg_reg_register_dump_range(SDE_DBG_NAME,
-			blk_name,
-			c->hw.blk_off + c->caps->sblk->enc.base,
-			c->hw.blk_off + c->caps->sblk->enc.base +
+	sde_dbg_reg_register_dump_range(
+		SDE_DBG_NAME, blk_name, c->hw.blk_off + c->caps->sblk->enc.base,
+		c->hw.blk_off + c->caps->sblk->enc.base +
 			c->caps->sblk->enc.len,
-			c->hw.xin_id);
+		c->hw.xin_id);
 
-	snprintf(blk_name, sizeof(blk_name), "vdc_ctl_%u",
-			c->idx - VDC_0);
+	snprintf(blk_name, sizeof(blk_name), "vdc_ctl_%u", c->idx - VDC_0);
 
-	sde_dbg_reg_register_dump_range(SDE_DBG_NAME,
-			blk_name,
-			c->hw.blk_off + c->caps->sblk->ctl.base,
-			c->hw.blk_off + c->caps->sblk->ctl.base +
+	sde_dbg_reg_register_dump_range(
+		SDE_DBG_NAME, blk_name, c->hw.blk_off + c->caps->sblk->ctl.base,
+		c->hw.blk_off + c->caps->sblk->ctl.base +
 			c->caps->sblk->ctl.len,
-			c->hw.xin_id);
+		c->hw.xin_id);
 
 	return c;
 
