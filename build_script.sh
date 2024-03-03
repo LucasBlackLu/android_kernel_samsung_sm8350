@@ -14,7 +14,16 @@ JOBS="$(nproc --all)"
 MAKE_PARAMS="-j$JOBS -C $SRC_DIR O=$SRC_DIR/out ARCH=arm64 CC=clang CLANG_TRIPLE=$TC_DIR/bin/aarch64-linux-gnu- LLVM=1 CROSS_COMPILE=$TC_DIR/bin/llvm-"
 export PATH="$TC_DIR/bin:$PATH"
 
-if [ "$DEVICE_MODEL" == "SM-G990B" ]; then
+if [ "$DEVICE_MODEL" == "SM-G9910" ]; then
+	DEVICE_NAME="o1q"
+	DEFCONFIG=vendor/o1q_defconfig
+elif [ "$DEVICE_MODEL" == "SM-G9960" ]; then
+	DEVICE_NAME="t2q"
+	DEFCONFIG=vendor/t2q_defconfig
+elif [ "$DEVICE_MODEL" == "SM-G9980" ]; then
+	DEVICE_NAME="p3q"
+	DEFCONFIG=vendor/p3q_defconfig
+elif [ "$DEVICE_MODEL" == "SM-G990B" ]; then
 	DEVICE_NAME="r9q"
 	DEFCONFIG=vendor/r9q_eur_openx_defconfig
 elif [ "$DEVICE_MODEL" == "SM-G990B2" ]; then
