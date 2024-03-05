@@ -37,7 +37,7 @@ jobs:
           
       - name: Fetch AnyKernel3
         run: |
-          git clone https://github.com/LucasBlackLu/AnyKernel3 -b wip ./Anykernel3
+          git clone https://github.com/LucasBlackLu/AnyKernel3 -b samsung ./Anykernel3
           
       - name: Build Kernel Clean
         run: |
