@@ -87,7 +87,7 @@ if [ -d "AnyKernel3" ]; then
 	zip -r9 $ZIP_NAME . -x '*.git*' '*patch*' '*ramdisk*' 'LICENSE' 'README.md'
 	cd ..
 else
-	git clone https://github.com/LucasBlackLu/AnyKernel3 -b wip
+	git clone https://github.com/LucasBlackLu/AnyKernel3 -b samsung
 	if [ -d "AnyKernel3/modules" ]; then
 		rm -rf AnyKernel3/modules/
 		mkdir AnyKernel3/modules/
