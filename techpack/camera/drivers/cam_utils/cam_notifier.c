@@ -33,11 +33,8 @@ static char checkCamera[] = { 'S', 'C', 'P', 'M', 'V', 'N', 'A', 'Y', 'H' };
 
 #if defined(CONFIG_SEC_P3Q_PROJECT)
 uint32_t notifyCameraList[] = {
-	SEC_WIDE_SENSOR,
-	SEC_ULTRA_WIDE_SENSOR,
-	SEC_TELE_SENSOR,
-	SEC_TELE2_SENSOR,
-	SEC_FRONT_SENSOR,
+	SEC_WIDE_SENSOR,  SEC_ULTRA_WIDE_SENSOR, SEC_TELE_SENSOR,
+	SEC_TELE2_SENSOR, SEC_FRONT_SENSOR,
 };
 #elif defined(CONFIG_SEC_Q2Q_PROJECT) || defined(CONFIG_SEC_V2Q_PROJECT)
 uint32_t notifyCameraList[] = {
@@ -47,9 +44,8 @@ uint32_t notifyCameraList[] = {
 	SEC_FRONT_TOP_SENSOR,
 };
 #else
-uint32_t notifyCameraList[] = {
-};
-#endif	/* CONFIG_SAMSUNG_WACOM_NOTIFIER */
+uint32_t notifyCameraList[] = {};
+#endif /* CONFIG_SAMSUNG_WACOM_NOTIFIER */
 
 static unsigned long wacom_notify_value = 0;
 
@@ -60,37 +56,34 @@ static unsigned long wacom_notify_value = 0;
  */
 int is_eeprom_info_update(uint32_t type, char *header_ver)
 {
-	int  result = 0;
+	int result = 0;
 	uint listIndex = 0, listSize = 0;
 	uint checkIndex = 0, checkSize = 0;
 	bool bCheck = false;
 
-	if (!header_ver)
-	{
+	if (!header_ver) {
 		return -1;
 	}
 
 	listSize = sizeof(notifyCameraList) / sizeof(uint32_t);
 	checkSize = sizeof(checkCamera) / sizeof(char);
 
-	for (listIndex = 0; listIndex < listSize; listIndex++)
-	{
-		if (type == notifyCameraList[listIndex])
-		{
-			for (checkIndex = 0; checkIndex < checkSize; checkIndex++)
-			{
-				if (header_ver[9] == checkCamera[checkIndex])
-				{
-					wacom_notify_value |= (unsigned long)(checkIndex + 1) << (listIndex * 8);
+	for (listIndex = 0; listIndex < listSize; listIndex++) {
+		if (type == notifyCameraList[listIndex]) {
+			for (checkIndex = 0; checkIndex < checkSize;
+			     checkIndex++) {
+				if (header_ver[9] == checkCamera[checkIndex]) {
+					wacom_notify_value |=
+						(unsigned long)(checkIndex + 1)
+						<< (listIndex * 8);
 					bCheck = true;
 					break;
 				}
 			}
 		}
 
-		if (bCheck == true)
-		{
-			 break;
+		if (bCheck == true) {
+			break;
 		}
 	}
 
@@ -104,11 +97,11 @@ int is_eeprom_info_update(uint32_t type, char *header_ver)
  *
  *	Define the mask if you need to send only information from certain cameras.
  */
-int is_eeprom_wacom_update_notifier()
+int is_eeprom_wacom_update_notifier(void)
 {
 	pr_info("[NOTI_DBG] send value 0x%llx to wacom", wacom_notify_value);
 	return raw_notifier_call_chain(&dev_cam_eeprom_noti_chain,
-			wacom_notify_value, NULL);
+				       wacom_notify_value, NULL);
 }
 #endif
 
@@ -119,27 +112,26 @@ int is_register_eeprom_notifier(struct notifier_block *nb)
 }
 EXPORT_SYMBOL_GPL(is_register_eeprom_notifier);
 
-
 int is_unregister_eeprom_notifier(struct notifier_block *nb)
 {
 	return is_unregister_notifier(&dev_cam_eeprom_noti_chain, nb);
 }
 EXPORT_SYMBOL_GPL(is_unregister_eeprom_notifier);
 
-
-int is_register_notifier(struct raw_notifier_head *head, struct notifier_block *nb)
+int is_register_notifier(struct raw_notifier_head *head,
+			 struct notifier_block *nb)
 {
 	if (!nb)
 		return -ENOENT;
 
-	return raw_notifier_chain_register(head,nb);
+	return raw_notifier_chain_register(head, nb);
 }
 
-int is_unregister_notifier(struct raw_notifier_head *head, struct notifier_block *nb)
+int is_unregister_notifier(struct raw_notifier_head *head,
+			   struct notifier_block *nb)
 {
 	if (!nb)
 		return -ENOENT;
 
-	return raw_notifier_chain_unregister(head,nb);
+	return raw_notifier_chain_unregister(head, nb);
 }
-
