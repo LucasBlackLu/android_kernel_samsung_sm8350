@@ -5,7 +5,7 @@ on:
   pull_request:
   push:
     branches:
-      - 'a14'
+      - 'wip'
 
 jobs:
   build_lavender:
@@ -42,7 +42,7 @@ jobs:
       - name: Build Kernel Clean
         run: |
           source ./build_script.sh ${{ matrix.target }}
-          cp ./AnyKernel3/Lavender* ./
+          cp ./AnyKernel3/Canary* ./
       - name: Clean Kernel Source
         run: |
           make mrproper ARCH=arm64 LLVM=1
@@ -50,16 +50,16 @@ jobs:
       - name: Build Kernel With KSU
         run: |
           source ./build_script.sh ${{ matrix.target }} --ksu
-          cp ./AnyKernel3/Lavender* ./
+          cp ./AnyKernel3/Canary* ./
           
       - name: Publish to GitHub
         uses: softprops/action-gh-release@v1
         with:
-          files: Lavender*
-          name: Lavender-CI_${{ github.run_id }}
+          files: Canary*
+          name: Canary-CI_${{ github.run_id }}
           tag_name: ${{ github.run_id }}
           body: |
-            Kernel: 5.4.233
+            Kernel: 5.4.259
             Clang: WeebX
         env:
           GITHUB_TOKEN: ${{ secrets.TEST }}
