@@ -28,7 +28,7 @@ enum qcom_download_dest {
 
 struct qcom_dload {
 	struct notifier_block panic_nb;
-	struct notifier_block reboot_nb;
+	struct notifier_block restart_nb;
 	struct kobject kobj;
 
 	bool in_panic;
@@ -79,7 +79,7 @@ static void msm_enable_dump_mode(bool enable)
 		set_download_mode(QCOM_DOWNLOAD_NODUMP);
 }
 
-#if IS_ENABLED(CONFIG_SEC_DEBUG) 
+#if IS_ENABLED(CONFIG_SEC_DEBUG)
 void set_dload_mode(int on)
 {
 	if (on)
@@ -106,7 +106,7 @@ static enum qcom_download_dest get_download_dest(struct qcom_dload *poweroff)
 }
 
 static int param_set_download_mode(const char *val,
-		const struct kernel_param *kp)
+				   const struct kernel_param *kp)
 {
 	int ret;
 
@@ -120,21 +120,20 @@ static int param_set_download_mode(const char *val,
 	return 0;
 }
 module_param_call(download_mode, param_set_download_mode, param_get_int,
-			&enable_dump, 0644);
+		  &enable_dump, 0644);
 
 /* interface for exporting attributes */
 struct reset_attribute {
-	struct attribute        attr;
+	struct attribute attr;
 	ssize_t (*show)(struct kobject *kobj, struct attribute *attr,
 			char *buf);
 	ssize_t (*store)(struct kobject *kobj, struct attribute *attr,
-			const char *buf, size_t count);
+			 const char *buf, size_t count);
 };
-#define to_reset_attr(_attr) \
-	container_of(_attr, struct reset_attribute, attr)
+#define to_reset_attr(_attr) container_of(_attr, struct reset_attribute, attr)
 
 static ssize_t attr_show(struct kobject *kobj, struct attribute *attr,
-				char *buf)
+			 char *buf)
 {
 	struct reset_attribute *reset_attr = to_reset_attr(attr);
 	ssize_t ret = -EIO;
@@ -146,7 +145,7 @@ static ssize_t attr_show(struct kobject *kobj, struct attribute *attr,
 }
 
 static ssize_t attr_store(struct kobject *kobj, struct attribute *attr,
-				const char *buf, size_t count)
+			  const char *buf, size_t count)
 {
 	struct reset_attribute *reset_attr = to_reset_attr(attr);
 	ssize_t ret = -EIO;
@@ -158,16 +157,15 @@ static ssize_t attr_store(struct kobject *kobj, struct attribute *attr,
 }
 
 static const struct sysfs_ops reset_sysfs_ops = {
-	.show	= attr_show,
-	.store	= attr_store,
+	.show = attr_show,
+	.store = attr_store,
 };
 
 static struct kobj_type qcom_dload_kobj_type = {
-	.sysfs_ops	= &reset_sysfs_ops,
+	.sysfs_ops = &reset_sysfs_ops,
 };
 
-static ssize_t emmc_dload_show(struct kobject *kobj,
-			       struct attribute *this,
+static ssize_t emmc_dload_show(struct kobject *kobj, struct attribute *this,
 			       char *buf)
 {
 	struct qcom_dload *poweroff = to_qcom_dload(kobj);
@@ -176,10 +174,10 @@ static ssize_t emmc_dload_show(struct kobject *kobj,
 		return -ENODEV;
 
 	return scnprintf(buf, PAGE_SIZE, "%u\n",
-			get_download_dest(poweroff) == QCOM_DOWNLOAD_DEST_EMMC);
+			 get_download_dest(poweroff) ==
+				 QCOM_DOWNLOAD_DEST_EMMC);
 }
-static ssize_t emmc_dload_store(struct kobject *kobj,
-				struct attribute *this,
+static ssize_t emmc_dload_store(struct kobject *kobj, struct attribute *this,
 				const char *buf, size_t count)
 {
 	int ret;
@@ -203,8 +201,7 @@ static ssize_t emmc_dload_store(struct kobject *kobj,
 }
 static struct reset_attribute attr_emmc_dload = __ATTR_RW(emmc_dload);
 
-static ssize_t dload_mode_show(struct kobject *kobj,
-			       struct attribute *this,
+static ssize_t dload_mode_show(struct kobject *kobj, struct attribute *this,
 			       char *buf)
 {
 	const char *mode;
@@ -225,8 +222,7 @@ static ssize_t dload_mode_show(struct kobject *kobj,
 	}
 	return scnprintf(buf, PAGE_SIZE, "DLOAD dump type: %s\n", mode);
 }
-static ssize_t dload_mode_store(struct kobject *kobj,
-				struct attribute *this,
+static ssize_t dload_mode_store(struct kobject *kobj, struct attribute *this,
 				const char *buf, size_t count)
 {
 	enum qcom_download_mode mode;
@@ -243,56 +239,36 @@ static ssize_t dload_mode_store(struct kobject *kobj,
 		return -EINVAL;
 	}
 
-	return set_dump_mode(mode) ? : count;
+	return set_dump_mode(mode) ?: count;
 }
 static struct reset_attribute attr_dload_mode = __ATTR_RW(dload_mode);
 
-static struct attribute *qcom_dload_attrs[] = {
-	&attr_emmc_dload.attr,
-	&attr_dload_mode.attr,
-	NULL
-};
+static struct attribute *qcom_dload_attrs[] = { &attr_emmc_dload.attr,
+						&attr_dload_mode.attr, NULL };
 static struct attribute_group qcom_dload_attr_group = {
 	.attrs = qcom_dload_attrs,
 };
 
 static int qcom_dload_panic(struct notifier_block *this, unsigned long event,
-			      void *ptr)
+			    void *ptr)
 {
-	struct qcom_dload *poweroff = container_of(this, struct qcom_dload,
-						     panic_nb);
+	struct qcom_dload *poweroff =
+		container_of(this, struct qcom_dload, panic_nb);
 	poweroff->in_panic = true;
 	if (enable_dump)
 		msm_enable_dump_mode(true);
 	return NOTIFY_OK;
 }
 
-static int qcom_dload_reboot(struct notifier_block *this, unsigned long event,
+static int qcom_dload_restart(struct notifier_block *this, unsigned long event,
 			      void *ptr)
 {
 	char *cmd = ptr;
-	struct qcom_dload *poweroff = container_of(this, struct qcom_dload,
-						     reboot_nb);
 
-	pr_debug("%s : cmd : %s\n", __func__, cmd);
-
-	/* Clean shutdown, disable dump mode to allow normal restart */
-	if (!poweroff->in_panic)
-		set_download_mode(QCOM_DOWNLOAD_NODUMP);
-
-#if !IS_ENABLED(CONFIG_SEC_DEBUG) 
-	if (cmd) {
-		if (!strcmp(cmd, "edl")) {
-			early_pcie_init_enable ? set_download_mode(QCOM_EDLOAD_PCI_MODE)
-				: set_download_mode(QCOM_DOWNLOAD_EDL);
-		}
-		else if (!strcmp(cmd, "qcom_dload"))
-			msm_enable_dump_mode(true);
-	}
-#endif
-
-	if (current_download_mode != QCOM_DOWNLOAD_NODUMP)
+	if (cmd && !strcmp(cmd, "edl")) {
+		set_download_mode(QCOM_DOWNLOAD_EDL);
 		reboot_mode = REBOOT_WARM;
+	}
 
 	return NOTIFY_OK;
 }
@@ -314,7 +290,7 @@ static void __iomem *map_prop_mem(const char *propname)
 }
 
 #ifdef CONFIG_RANDOMIZE_BASE
-#define KASLR_OFFSET_MASK	0x00000000FFFFFFFF
+#define KASLR_OFFSET_MASK 0x00000000FFFFFFFF
 static void store_kaslr_offset(void)
 {
 	void __iomem *mem = map_prop_mem("qcom,msm-imem-kaslr_offset");
@@ -331,7 +307,9 @@ static void store_kaslr_offset(void)
 	iounmap(mem);
 }
 #else
-static void store_kaslr_offset(void) {}
+static void store_kaslr_offset(void)
+{
+}
 #endif /* CONFIG_RANDOMIZE_BASE */
 
 static void check_pci_edl(struct device_node *np)
@@ -393,7 +371,7 @@ static int qcom_dload_probe(struct platform_device *pdev)
 	check_pci_edl(pdev->dev.of_node);
 
 #if IS_ENABLED(CONFIG_SEC_DEBUG)
-	enable_dump = true; 
+	enable_dump = true;
 	msm_enable_dump_mode(enable_dump);
 #else
 	msm_enable_dump_mode(enable_dump);
@@ -406,9 +384,14 @@ static int qcom_dload_probe(struct platform_device *pdev)
 	atomic_notifier_chain_register(&panic_notifier_list,
 				       &poweroff->panic_nb);
 
-	poweroff->reboot_nb.notifier_call = qcom_dload_reboot;
-	poweroff->reboot_nb.priority = 255;
-	register_reboot_notifier(&poweroff->reboot_nb);
+	poweroff->restart_nb.notifier_call = qcom_dload_restart;
+	/* Here, Restart handler priority should be higher than
+	 * of restart handler present in scm driver so that
+	 * reboot_mode set by this handler seen by SCM's one
+	 * for EDL mode.
+	 */
+	poweroff->restart_nb.priority = 131;
+	register_restart_handler(&poweroff->restart_nb);
 
 	platform_set_drvdata(pdev, poweroff);
 
@@ -421,7 +404,7 @@ static int qcom_dload_remove(struct platform_device *pdev)
 
 	atomic_notifier_chain_unregister(&panic_notifier_list,
 					 &poweroff->panic_nb);
-	unregister_reboot_notifier(&poweroff->reboot_nb);
+	unregister_restart_handler(&poweroff->restart_nb);
 
 	if (poweroff->dload_dest_addr)
 		iounmap(poweroff->dload_dest_addr);
@@ -430,7 +413,9 @@ static int qcom_dload_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id of_qcom_dload_match[] = {
-	{ .compatible = "qcom,dload-mode", },
+	{
+		.compatible = "qcom,dload-mode",
+	},
 	{},
 };
 MODULE_DEVICE_TABLE(of, of_qcom_dload_match);
