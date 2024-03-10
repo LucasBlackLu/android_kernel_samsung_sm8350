@@ -43,7 +43,7 @@ fi
 
 # Check the value of KSU
 if [ "$KSU" == "true" ]; then
-	ZIP_NAME="Lavender_KSU_"$DEVICE_NAME"_"$DEVICE_MODEL"_"$(date +%d%m%y-%H%M)""
+	ZIP_NAME="TWRP_KSU_"$DEVICE_NAME"_"$DEVICE_MODEL"_"$(date +%d%m%y-%H%M)""
 	if [ -d "KernelSU" ]; then
 		echo "KernelSU exists"
 	else
@@ -53,7 +53,7 @@ if [ "$KSU" == "true" ]; then
 	fi
 elif [ "$KSU" == "false" ]; then
 	echo "KSU disabled"
-	ZIP_NAME="Lavender_"$DEVICE_NAME"_"$DEVICE_MODEL"_"$(date +%d%m%y-%H%M)""
+	ZIP_NAME="TWRP_"$DEVICE_NAME"_"$DEVICE_MODEL"_"$(date +%d%m%y-%H%M)""
 	if [ -d "KernelSU" ]; then
 		git reset HEAD --hard
 	fi
@@ -83,7 +83,7 @@ if [ -d "AnyKernel3" ]; then
 	cp ./out/arch/arm64/boot/Image ./AnyKernel3/
 	cp ./out/arch/arm64/boot/dtbo.img ./AnyKernel3/
 	cd AnyKernel3
-	rm -rf Lavender*
+	rm -rf TWRP*
 	zip -r9 $ZIP_NAME . -x '*.git*' '*patch*' '*ramdisk*' 'LICENSE' 'README.md'
 	cd ..
 else
@@ -104,7 +104,7 @@ else
 	cp ./out/arch/arm64/boot/Image ./AnyKernel3/
 	cp ./out/arch/arm64/boot/dtbo.img ./AnyKernel3/
 	cd AnyKernel3
-	rm -rf Lavender*
+	rm -rf TWRP*
 	zip -r9 $ZIP_NAME . -x '*.git*' '*patch*' '*ramdisk*' 'LICENSE' 'README.md'
 	cd ..
 fi
