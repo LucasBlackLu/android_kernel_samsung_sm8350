@@ -1900,12 +1900,19 @@ static void glink_slatecom_process_cmd(struct glink_slatecom *glink,
 	unsigned int param3;
 	unsigned int param4;
 	unsigned int cmd;
-	int offset = 0;
-	int ret;
+	u32 offset = 0;
+	int ret = 0;
 	u16 name_len;
 	char *name;
 
 	while (offset < rx_size) {
+		if (rx_size - offset < sizeof(struct glink_slatecom_msg)) {
+			ret = -EBADMSG;
+			GLINK_ERR(glink, "%s: Error %d process cmd\n", __func__,
+				  ret);
+			return ret;
+		}
+
 		msg = (struct glink_slatecom_msg *)(rx_data + offset);
 		offset += sizeof(*msg);
 
@@ -1927,7 +1934,7 @@ static void glink_slatecom_process_cmd(struct glink_slatecom *glink,
 		case SLATECOM_CMD_CLOSE_ACK:
 			glink_slatecom_rx_defer(glink,
 						rx_data + offset - sizeof(*msg),
-						rx_size + offset - sizeof(*msg),
+						rx_size - offset + sizeof(*msg),
 						0);
 			break;
 		case SLATECOM_CMD_RX_INTENT_REQ:
@@ -1941,7 +1948,7 @@ static void glink_slatecom_process_cmd(struct glink_slatecom *glink,
 			name = rx_data + offset;
 			glink_slatecom_rx_defer(
 				glink, rx_data + offset - sizeof(*msg),
-				rx_size + offset - sizeof(*msg),
+				rx_size - offset + sizeof(*msg),
 				ALIGN(name_len, SLATECOM_ALIGNMENT));
 
 			offset += ALIGN(name_len, SLATECOM_ALIGNMENT);
@@ -1988,6 +1995,7 @@ static void glink_slatecom_process_cmd(struct glink_slatecom *glink,
 			break;
 		}
 	}
+	return ret;
 }
 
 /**
