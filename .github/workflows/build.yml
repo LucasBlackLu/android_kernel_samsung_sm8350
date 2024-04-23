@@ -59,7 +59,8 @@ jobs:
           name: Canary-CI_${{ github.run_id }}
           tag_name: ${{ github.run_id }}
           body: |
-            Kernel: 5.4.259
+            Kernel: 5.4.265
             Clang: WeebX
+            Warning: The tag file is using for test
         env:
           GITHUB_TOKEN: ${{ secrets.TEST }}
