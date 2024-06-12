@@ -3,6 +3,7 @@
  * drivers/mmc/host/sdhci-msm.c - Qualcomm SDHCI Platform driver
  *
  * Copyright (c) 2013-2014,2020. The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -1875,6 +1876,12 @@ static bool sdhci_msm_populate_pdata(struct device *dev,
 
 	if (sdhci_msm_dt_parse_hsr_info(dev, msm_host))
 		goto out;
+
+#if defined(CONFIG_SDC_QTI)
+	msm_host->mmc->partial_init_broken =
+		of_property_read_bool(dev->of_node,
+			"qcom,partial_init_broken");
+#endif
 
 	if (!sdhci_msm_dt_get_array(dev, "qcom,ice-clk-rates",
 			&ice_clk_table, &ice_clk_table_len, 0)) {
@@ -4881,7 +4888,11 @@ static int sdhci_msm_init_sysfs(struct platform_device *pdev)
 static void sdhci_msm_set_caps(struct sdhci_msm_host *msm_host)
 {
 	msm_host->mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY | MMC_CAP_NEED_RSP_BUSY;
-	msm_host->mmc->caps2 |= MMC_CAP2_NO_PRESCAN_POWERUP;
+
+#if defined(CONFIG_SDC_QTI)
+	if (!msm_host->mmc->partial_init_broken)
+		msm_host->mmc->caps2 |= MMC_CAP2_CLK_SCALE;
+#endif
 }
 
 static int sdhci_msm_probe(struct platform_device *pdev)
@@ -5161,6 +5172,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 #if defined(CONFIG_SDC_QTI)
 	host->timeout_clk_div = 4;
 #endif
+
 	sdhci_msm_setup_pm(pdev, msm_host);
 
 	host->mmc_host_ops.execute_tuning = sdhci_msm_execute_tuning;
