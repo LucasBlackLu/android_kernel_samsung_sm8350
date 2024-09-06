@@ -910,7 +910,7 @@ static void sec_input_set_prop(struct device *dev, struct input_dev *input_dev, 
 	set_bit(BTN_TOOL_FINGER, input_dev->keybit);
 	set_bit(BTN_PALM, input_dev->keybit);
 	set_bit(BTN_LARGE_PALM, input_dev->keybit);
-	set_bit(KEY_BLACK_UI_GESTURE, input_dev->keybit);
+	set_bit(KEY_WAKEUP, input_dev->keybit);
 	set_bit(KEY_INT_CANCEL, input_dev->keybit);
 
 	set_bit(propbit, input_dev->propbit);
@@ -951,7 +951,7 @@ static void sec_input_set_prop2(struct device *dev, struct input_dev *input_dev,
 	set_bit(BTN_TOOL_FINGER, input_dev->keybit);
 	set_bit(BTN_PALM, input_dev->keybit);
 	set_bit(BTN_LARGE_PALM, input_dev->keybit);
-	set_bit(KEY_BLACK_UI_GESTURE, input_dev->keybit);
+	set_bit(KEY_WAKEUP, input_dev->keybit);
 	set_bit(KEY_INT_CANCEL, input_dev->keybit);
 
 	set_bit(propbit, input_dev->propbit);
@@ -992,7 +992,7 @@ static void sec_input_set_prop_pad(struct device *dev, struct input_dev *input_d
 	set_bit(BTN_TOOL_FINGER, input_dev->keybit);
 	set_bit(BTN_PALM, input_dev->keybit);
 	set_bit(BTN_LARGE_PALM, input_dev->keybit);
-	set_bit(KEY_BLACK_UI_GESTURE, input_dev->keybit);
+	set_bit(KEY_WAKEUP, input_dev->keybit);
 	set_bit(KEY_INT_CANCEL, input_dev->keybit);
 
 	set_bit(propbit, input_dev->propbit);
