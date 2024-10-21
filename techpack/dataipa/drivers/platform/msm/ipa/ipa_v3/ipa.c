@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -3664,18 +3665,16 @@ static void ipa3_halt_q6_gsi_channels(bool prod)
 					gsi_ep_cfg->ipa_gsi_chan_num,
 					gsi_ep_cfg->ee, &code);
 			}
-			if (ret == GSI_STATUS_SUCCESS) {
+			if (ret == GSI_STATUS_SUCCESS)
 				IPADBG("halted gsi ch %d ee %d with code %d\n",
 				gsi_ep_cfg->ipa_gsi_chan_num,
 				gsi_ep_cfg->ee,
 				code);
-			} else {
+			else
 				IPAERR("failed to halt ch %d ee %d code %d\n",
 				gsi_ep_cfg->ipa_gsi_chan_num,
 				gsi_ep_cfg->ee,
 				code);
-				ipa_assert();
-			}
 		}
 	}
 }
@@ -7003,6 +7002,22 @@ sched_fw_load:
 		&ipa3_fw_loading_work);
 }
 
+#if defined(CONFIG_QGKI)
+static bool disable_cpboot;
+static int __init get_cpboot_status(char *str)
+{
+
+	if(!strncmp(str,"disable",7))
+		disable_cpboot = true;
+	else
+		disable_cpboot = false;
+
+	pr_warn("%s : disable_cpboot:%u\n",__func__,disable_cpboot);
+	return 0;
+}
+early_param("androidboot.cpboot", get_cpboot_status);
+#endif
+
 static ssize_t ipa3_write(struct file *file, const char __user *buf,
 			  size_t count, loff_t *ppos)
 {
@@ -7011,6 +7026,11 @@ static ssize_t ipa3_write(struct file *file, const char __user *buf,
 	char dbg_buff[32] = { 0 };
 	int i = 0;
 
+#if defined(CONFIG_QGKI)
+	if(disable_cpboot)
+		return -ENODEV;
+#endif
+		
 	if (count >= sizeof(dbg_buff))
 		return -EFAULT;
 
@@ -7595,8 +7615,8 @@ static int ipa3_pre_init(const struct ipa3_plat_drv_res *resource_p,
 	atomic_set(&ipa3_ctx->ipa3_active_clients.cnt, 1);
 
 	/* Create workqueues for power management */
-	ipa3_ctx->power_mgmt_wq =
-		create_singlethread_workqueue("ipa_power_mgmt");
+	ipa3_ctx->power_mgmt_wq = alloc_workqueue("ipa_power_mgmt",
+			WQ_MEM_RECLAIM | WQ_UNBOUND | WQ_SYSFS | WQ_HIGHPRI, 1);
 	if (!ipa3_ctx->power_mgmt_wq) {
 		IPAERR("failed to create power mgmt wq\n");
 		result = -ENOMEM;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/slab.h>
 #include <linux/kthread.h>
@@ -25,6 +25,14 @@
 #include "adsp_err.h"
 #include <dsp/voice_mhi.h>
 #include <soc/qcom/secure_buffer.h>
+
+#ifdef CONFIG_SEC_SND_ADAPTATION
+#include <dsp/q6voice_adaptation.h>
+#endif /* CONFIG_SEC_SND_ADAPTATION */
+
+#ifdef CONFIG_DSP_SLEEP_RECOVERY
+#include <soc/qcom/subsystem_restart.h>
+#endif /* CONFIG_DSP_SLEEP_RECOVERY */
 
 #define TIMEOUT_MS 1000
 
@@ -153,6 +161,13 @@ static int voice_pack_and_set_cvp_param(struct voice_data *v,
 static int voice_pack_and_set_cvs_ui_property(struct voice_data *v,
 					      struct param_hdr_v3 param_hdr,
 					      u8 *param_data);
+
+#ifdef CONFIG_SEC_SND_ADAPTATION
+struct common_data *voice_get_common_data(void)
+{
+	return &common;
+}
+#endif /* CONFIG_SEC_SND_ADAPTATION */
 
 static void voice_itr_init(struct voice_session_itr *itr,
 			   u32 session_id)
@@ -553,6 +568,7 @@ static bool is_sub1_vsid(u32 session_id)
 	case VOLTE_SESSION_VSID:
 	case VOWLAN_SESSION_VSID:
 	case VOICEMMODE1_VSID:
+	case VOIP_SESSION_VSID:
 		ret = true;
 		break;
 	default:
@@ -2852,6 +2868,13 @@ static int voice_send_cvs_register_cal_cmd(struct voice_data *v)
 		goto unlock;
 	}
 
+	if (col_data->cal_data.size >= MAX_COL_INFO_SIZE) {
+		pr_err("%s: Invalid cal data size %d!\n",
+			__func__, col_data->cal_data.size);
+		ret = -EINVAL;
+		goto unlock;
+	}
+
 	memcpy(&cvs_reg_cal_cmd.cvs_cal_data.column_info[0],
 	       (void *) &((struct audio_cal_info_voc_col *)
 	       col_data->cal_info)->data,
@@ -3302,7 +3325,7 @@ static int voice_send_cvp_register_cal_cmd(struct voice_data *v)
 				cal_block->cal_info)->tx_acdb_id;
 	v->dev_rx.dev_id = ((struct audio_cal_info_vocproc *)
 				cal_block->cal_info)->rx_acdb_id;
-	pr_debug("%s: %s: Tx acdb id = %d and Rx acdb id = %d", __func__,
+	pr_info("%s: %s: Tx acdb id = %d and Rx acdb id = %d", __func__,
 		 voc_get_session_name(v->session_id), v->dev_tx.dev_id,
 		 v->dev_rx.dev_id);
 
@@ -7105,6 +7128,10 @@ int voc_end_voice_call(uint32_t session_id)
 
 		pr_debug("%s: VOC_STATE: %d\n", __func__, v->voc_state);
 
+#ifdef CONFIG_SEC_SND_ADAPTATION
+		voice_sec_loopback_end_cmd(session_id);
+#endif /* CONFIG_SEC_SND_ADAPTATION */
+
 		ret = voice_destroy_vocproc(v);
 		if (ret < 0)
 			pr_err("%s:  destroy voice failed\n", __func__);
@@ -7118,6 +7145,9 @@ int voc_end_voice_call(uint32_t session_id)
 			pr_debug("%s: voice_mhi_end failed! %d\n",
 				 __func__, ret);
 		v->voc_state = VOC_RELEASE;
+#ifdef CONFIG_DSP_SLEEP_RECOVERY
+		subsys_set_voice_state(false);
+#endif
 	} else {
 		pr_err("%s: Error: End voice called in state %d\n",
 			__func__, v->voc_state);
@@ -7380,6 +7410,9 @@ int voc_enable_device(uint32_t session_id)
 					v->dev_rx.dev_mute,
 					v->dev_rx.dev_mute_ramp_duration_ms);
 		}
+#ifdef CONFIG_DSP_SLEEP_RECOVERY
+		subsys_set_voice_state(true);
+#endif
 	} else {
 		pr_debug("%s: called in voc state=%d, No_OP\n",
 			 __func__, v->voc_state);
@@ -7455,6 +7488,9 @@ int voc_resume_voice_call(uint32_t session_id)
 		goto fail;
 	}
 	v->voc_state = VOC_RUN;
+#ifdef CONFIG_DSP_SLEEP_RECOVERY
+	subsys_set_voice_state(true);
+#endif
 	return 0;
 fail:
 	return -EINVAL;
@@ -7570,7 +7606,14 @@ int voc_start_voice_call(uint32_t session_id)
 			goto fail;
 		}
 
+#ifdef CONFIG_SEC_SND_ADAPTATION
+		voice_sec_loopback_start_cmd(session_id);
+#endif /* CONFIG_SEC_SND_ADAPTATION */
+
 		v->voc_state = VOC_RUN;
+#ifdef CONFIG_DSP_SLEEP_RECOVERY
+		subsys_set_voice_state(true);
+#endif
 	} else {
 		pr_err("%s: Error: Start voice called in state %d\n",
 			__func__, v->voc_state);

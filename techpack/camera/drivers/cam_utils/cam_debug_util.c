@@ -218,6 +218,9 @@ const char *cam_get_module_name(unsigned int module_id)
 	case CAM_SFE:
 		name = "CAM-SFE";
 		break;
+	case CAM_SBI:
+		name = "CAM-SBI";
+		break;
 	default:
 		name = "CAM";
 		break;
@@ -262,6 +265,7 @@ void cam_debug_log(unsigned int module_id, const char *func, const int line,
 		va_list args;
 
 		va_start(args, fmt);
+
 		vsnprintf(str_buffer, STR_BUFFER_MAX_LENGTH, fmt, args);
 
 		if ((debug_type == 0) || (debug_type == 2)) {

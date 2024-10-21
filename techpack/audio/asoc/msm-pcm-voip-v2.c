@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/init.h>
@@ -26,6 +27,7 @@
 #define DRV_NAME "msm-pcm-voip-v2"
 
 #define SHARED_MEM_BUF 2
+#define VOIP_MIN_Q_LEN 2
 #define VOIP_MAX_Q_LEN 10
 #define VOIP_MAX_VOC_PKT_SIZE 4096
 #define VOIP_MIN_VOC_PKT_SIZE 320
@@ -199,10 +201,10 @@ static struct snd_pcm_hardware msm_pcm_hardware = {
 	.rate_max =             48000,
 	.channels_min =         1,
 	.channels_max =         1,
-	.buffer_bytes_max =	sizeof(struct voip_buf_node) * VOIP_MAX_Q_LEN,
+	.buffer_bytes_max =	sizeof(struct voip_buf_node) * VOIP_MIN_Q_LEN,
 	.period_bytes_min =	VOIP_MIN_VOC_PKT_SIZE,
 	.period_bytes_max =	VOIP_MAX_VOC_PKT_SIZE,
-	.periods_min =		VOIP_MAX_Q_LEN,
+	.periods_min =		VOIP_MIN_Q_LEN,
 	.periods_max =		VOIP_MAX_Q_LEN,
 	.fifo_size =            0,
 };
@@ -365,6 +367,13 @@ static void voip_process_ul_pkt(uint8_t *voc_pkt,
 		switch (prtd->mode) {
 		case MODE_AMR_WB:
 		case MODE_AMR: {
+			if (pkt_len <= DSP_FRAME_HDR_LEN) {
+				pr_err("%s: pkt_len %d is < required len\n",
+						__func__, pkt_len);
+				spin_unlock_irqrestore(&prtd->dsp_ul_lock,
+							dsp_flags);
+				return;
+			}
 			/* Remove the DSP frame info header. Header format:
 			 * Bits 0-3: Frame rate
 			 * Bits 4-7: Frame type
@@ -385,6 +394,13 @@ static void voip_process_ul_pkt(uint8_t *voc_pkt,
 		case MODE_4GV_NB:
 		case MODE_4GV_WB:
 		case MODE_4GV_NW: {
+			if (pkt_len <= DSP_FRAME_HDR_LEN) {
+				pr_err("%s: pkt_len %d is < required len\n",
+						__func__, pkt_len);
+				spin_unlock_irqrestore(&prtd->dsp_ul_lock,
+							dsp_flags);
+				return;
+			}
 			/* Remove the DSP frame info header.
 			 * Header format:
 			 * Bits 0-3: frame rate
@@ -422,6 +438,13 @@ static void voip_process_ul_pkt(uint8_t *voc_pkt,
 			buf_node->frame.frm_hdr.timestamp = timestamp;
 			voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
 
+			if (pkt_len <= 2 * DSP_FRAME_HDR_LEN) {
+				pr_err("%s: pkt_len %d is < required len\n",
+						__func__, pkt_len);
+				spin_unlock_irqrestore(&prtd->dsp_ul_lock,
+							dsp_flags);
+				return;
+			}
 			/* There are two frames in the buffer. Length of the
 			 * first frame:
 			 */
@@ -456,6 +479,14 @@ static void voip_process_ul_pkt(uint8_t *voc_pkt,
 							(*voc_pkt) & 0x03;
 				buf_node->frame.frm_hdr.timestamp = timestamp;
 				voc_pkt = voc_pkt + DSP_FRAME_HDR_LEN;
+
+				if (pkt_len <= 2 * DSP_FRAME_HDR_LEN) {
+					pr_err("%s: pkt_len %d is < required len\n",
+							__func__, pkt_len);
+					spin_unlock_irqrestore(&prtd->dsp_ul_lock,
+								dsp_flags);
+					return;
+				}
 
 				/* There are two frames in the buffer. Length
 				 * of the second frame:
@@ -1264,10 +1295,16 @@ static int msm_pcm_hw_params(struct snd_pcm_substream *substream,
 	struct snd_dma_buffer *dma_buf = &substream->dma_buffer;
 	struct voip_buf_node *buf_node = NULL;
 	int i = 0, offset = 0;
+	int periods = VOIP_MIN_Q_LEN;
 
 	pr_debug("%s: voip\n", __func__);
 
 	mutex_lock(&voip_info.lock);
+
+	/* Use various voip Q size */
+	periods = params_periods(params);
+	pr_info("%s: periods = %d\n", __func__, periods);
+	runtime->hw.buffer_bytes_max = sizeof(struct voip_buf_node) * periods;
 
 	dma_buf->dev.type = SNDRV_DMA_TYPE_DEV;
 	dma_buf->dev.dev = substream->pcm->card->dev;
@@ -1286,7 +1323,7 @@ static int msm_pcm_hw_params(struct snd_pcm_substream *substream,
 	memset(dma_buf->area, 0, runtime->hw.buffer_bytes_max);
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		for (i = 0; i < VOIP_MAX_Q_LEN; i++) {
+		for (i = 0; i < periods; i++) {
 			buf_node = (void *)dma_buf->area + offset;
 
 			list_add_tail(&buf_node->list,
@@ -1294,7 +1331,7 @@ static int msm_pcm_hw_params(struct snd_pcm_substream *substream,
 			offset = offset + sizeof(struct voip_buf_node);
 		}
 	} else {
-		for (i = 0; i < VOIP_MAX_Q_LEN; i++) {
+		for (i = 0; i < periods; i++) {
 			buf_node = (void *) dma_buf->area + offset;
 			list_add_tail(&buf_node->list,
 					&voip_info.free_out_queue);
