@@ -16,3 +16,21 @@ config MACH_O1Q_CHN_HKX
         help
           Support for Samsung O1Q CHN HKX device.
 
+config SEC_T2Q_PROJECT
+	default n
+	bool "Samsung T2Q Project"
+	help
+	  Support for Samsung T2Q Project
+
+config MACH_T2Q_CHN_OPENX
+        default n
+        bool "Samsung T2Q CHN OPENX"
+        help
+          Support for Samsung T2Q CHN OPENX device.
+
+config MACH_T2Q_CHN_HKX
+        default n
+        bool "Samsung T2Q CHN HKX"
+        help
+          Support for Samsung T2Q CHN HKX device.
+
