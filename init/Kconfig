@@ -35,7 +35,7 @@ config GCC_VERSION
 	default 0
 
 config CC_IS_CLANG
-	def_bool $(success,$(CC) --version | head -n 1 | grep -q clang)
+	def_bool $(success,$(CC) --version | grep -q clang)
 
 config LD_IS_LLD
 	def_bool $(success,$(LD) -v | head -n 1 | grep -q LLD)
@@ -885,6 +885,11 @@ config MEMCG_SWAP_ENABLED
 	  For those who want to have the feature enabled by default should
 	  select this option (if, for some reason, they need to disable it
 	  then swapaccount=0 does the trick).
+
+config MEMCG_FORCE_USE_VM_SWAPPINESS
+	bool "Force to use vm_swappiness instead of memcg->swappiness"
+	depends on MEMCG_SWAP
+	default y
 
 config MEMCG_KMEM
 	bool
