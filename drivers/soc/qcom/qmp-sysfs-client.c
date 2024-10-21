@@ -15,66 +15,78 @@
 
 #define MAX_MSG_SIZE 96 /* Imposed by the remote*/
 
-struct qmp_debugfs_data {
+struct qmp_sysfs_data {
 	struct qmp_pkt pkt;
 	char buf[MAX_MSG_SIZE + 1];
 };
 
-static struct qmp_debugfs_data data_pkt[MBOX_TX_QUEUE_LEN];
+static struct qmp_sysfs_data data_pkt[MBOX_TX_QUEUE_LEN];
 static struct mbox_chan *chan;
 static struct mbox_client *cl;
 
-static DEFINE_MUTEX(qmp_debugfs_mutex);
+static DEFINE_MUTEX(qmp_sysfs_mutex);
+bool ddr_fmax_limit = false;
 
-static ssize_t aop_msg_write(struct file *file, const char __user *userstr,
-		size_t len, loff_t *pos)
+static ssize_t aop_msg_write(struct device *dev, struct device_attribute *attr, const char *buf,
+		size_t len)
 {
 	static int count;
-	int rc;
-
+	int target, ret;
+	int cmd_len;
+	
 	if (!len || (len > MAX_MSG_SIZE))
 		return len;
 
-	mutex_lock(&qmp_debugfs_mutex);
+	ret = kstrtoint(buf, 10, &target);
+	if (ret)
+		return -EINVAL;
+
+	if ((target != 2736) && (target != 3196)) {
+		pr_err("[%s] %d is not a valid input\n", __func__, target);
+		return -EINVAL;
+	}
+	
+	mutex_lock(&qmp_sysfs_mutex);
 
 	if (count >= MBOX_TX_QUEUE_LEN)
 		count = 0;
-
+	
 	memset(&(data_pkt[count]), 0, sizeof(data_pkt[count]));
-	rc  = copy_from_user(data_pkt[count].buf, userstr, len);
-	if (rc) {
-		pr_err("%s copy from user failed, rc=%d\n", __func__, rc);
-		mutex_unlock(&qmp_debugfs_mutex);
-		return len;
-	}
+
+	cmd_len = snprintf(data_pkt[count].buf, MAX_MSG_SIZE, "{class: ddr, res: capped, val: %d}", target);
 
 	/*
 	 * Trim the leading and trailing white spaces
 	 */
 	strim(data_pkt[count].buf);
 
+	pr_info("[%s] cmd : %s (%d)\n", __func__, data_pkt[count].buf, cmd_len);
 	/*
 	 * Controller expects a 4 byte aligned buffer
 	 */
-	data_pkt[count].pkt.size = (len + 0x3) & ~0x3;
+	
+	data_pkt[count].pkt.size = (cmd_len + 0x3) & ~0x3;
 	data_pkt[count].pkt.data = data_pkt[count].buf;
 
 	if (mbox_send_message(chan, &(data_pkt[count].pkt)) < 0)
 		pr_err("Failed to send qmp request\n");
 	else
+	{
+		ddr_fmax_limit = (target == 3196) ? false : true;
 		count++;
+	}
 
-	mutex_unlock(&qmp_debugfs_mutex);
+	mutex_unlock(&qmp_sysfs_mutex);
 	return len;
 }
 
-static const struct file_operations aop_msg_fops = {
-	.write = aop_msg_write,
-};
+static DEVICE_ATTR(aop_send_message, 0200, NULL, aop_msg_write);
 
 static int qmp_msg_probe(struct platform_device *pdev)
 {
-	struct dentry *file;
+	int ret;
+	
+	pr_err("[%s] +++ %s +++\n", __func__, dev_name(&pdev->dev));
 
 	cl = devm_kzalloc(&pdev->dev, sizeof(*cl), GFP_KERNEL);
 	if (!cl)
@@ -91,10 +103,14 @@ static int qmp_msg_probe(struct platform_device *pdev)
 		return PTR_ERR(chan);
 	}
 
-	file = debugfs_create_file("aop_send_message", 0220, NULL, NULL,
-			&aop_msg_fops);
-	if (!file)
+	ret = device_create_file(&pdev->dev, &dev_attr_aop_send_message);
+
+	if (ret)
 		goto err;
+
+	mutex_init(&qmp_sysfs_mutex);
+	
+	pr_err("[%s] successfully probed\n", __func__);
 	return 0;
 err:
 	mbox_free_channel(chan);
@@ -103,14 +119,14 @@ err:
 }
 
 static const struct of_device_id aop_qmp_match_tbl[] = {
-	{.compatible = "qcom,debugfs-qmp-client"},
+	{.compatible = "qcom,sysfs-qmp-client"},
 	{},
 };
 
 static struct platform_driver aop_qmp_msg_driver = {
 	.probe = qmp_msg_probe,
 	.driver = {
-		.name = "debugfs-qmp-client",
+		.name = "sysfs-qmp-client",
 		.owner = THIS_MODULE,
 		.suppress_bind_attrs = true,
 		.of_match_table = aop_qmp_match_tbl,
