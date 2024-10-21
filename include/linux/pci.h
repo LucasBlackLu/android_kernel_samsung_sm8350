@@ -474,11 +474,15 @@ struct pci_dev {
 	char		*driver_override; /* Driver name to force a match */
 
 	unsigned long	priv_flags;	/* Private flags for the PCI driver */
+#ifdef CONFIG_SEC_PCIE
+	unsigned int drv_probe_ready; /* 1 if pcie driver is loaded successfully*/
+#endif
 
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
 	ANDROID_KABI_RESERVE(3);
 	ANDROID_KABI_RESERVE(4);
+
 };
 
 static inline struct pci_dev *pci_physfn(struct pci_dev *dev)
