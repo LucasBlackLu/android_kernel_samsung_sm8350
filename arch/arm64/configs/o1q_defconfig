@@ -6842,10 +6842,6 @@ CONFIG_INIT_ON_ALLOC_DEFAULT_ON=y
 # CONFIG_DEFEX_KERNEL_ONLY is not set
 # CONFIG_SECURITY_DEFEX_USER is not set
 # CONFIG_PROCA is not set
-# CONFIG_PROCA_GKI_10 is not set
-# CONFIG_PROCA_S_OS is not set
-# CONFIG_PROCA_CERTIFICATES_XATTR is not set
-# CONFIG_PROCA_CERTIFICATES_DB is not set
 # CONFIG_GAF is not set
 # CONFIG_GAF_V3 is not set
 # CONFIG_GAF_V4 is not set
@@ -6862,6 +6858,9 @@ CONFIG_INIT_ON_ALLOC_DEFAULT_ON=y
 # CONFIG_FIVE_DEFAULT_HASH_SHA256 is not set
 # CONFIG_FIVE_DEFAULT_HASH_SHA512 is not set
 # CONFIG_FIVE_TRUSTED_KEYRING is not set
+=======
+# CONFIG_PROCA is not set
+>>>>>>> 274d2eded16a (treewide: remove samsung proca):arch/arm64/configs/vendor/gta9p_defconfig
 # end of Security options
 
 CONFIG_CRYPTO=y
