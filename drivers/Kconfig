@@ -276,5 +276,7 @@ source "drivers/regulator/s2dos05/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT
 source "drivers/uwb/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 source "drivers/uwb/uwb_logger/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 source "drivers/vibrator/cs40l2x/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
-
+# p3q
+source "drivers/input/wacom/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+source "drivers/sensors/vl53l5/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 endmenu
