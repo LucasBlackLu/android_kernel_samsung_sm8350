@@ -35,6 +35,12 @@ source "techpack/display/msm/dp/Kconfig"
 
 source "techpack/camera/drivers/Kconfig"
 
+# o1q
 source "techpack/display/msm/samsung/S6E3HAB_AMB623TS01/Kconfig"
 source "techpack/display/msm/samsung/S6E3FAB_AMB624XT01/Kconfig"
+
+#t2q
+source "techpack/display/msm/samsung/S6E3HAB_AMB677TY01/Kconfig"
+source "techpack/display/msm/samsung/S6E3FAB_AMB667XU01/Kconfig"
+
 source "techpack/display/msm/samsung/Kconfig"
