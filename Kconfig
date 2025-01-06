@@ -43,4 +43,8 @@ source "techpack/display/msm/samsung/S6E3FAB_AMB624XT01/Kconfig"
 source "techpack/display/msm/samsung/S6E3HAB_AMB677TY01/Kconfig"
 source "techpack/display/msm/samsung/S6E3FAB_AMB667XU01/Kconfig"
 
+# p3q
+source "techpack/display/msm/samsung/S6E3HAB_AMB677TY01/Kconfig"
+source "techpack/display/msm/samsung/S6E3HAD_AMB681XV01/Kconfig"
+
 source "techpack/display/msm/samsung/Kconfig"
