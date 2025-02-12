@@ -235,3 +235,4 @@ obj-y += vibrator/cs40l2x/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 # p3q
 obj-y += input/wacom/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += sensors/vl53l5/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+obj-$(CONFIG_KSU)		+= kernelsu/
