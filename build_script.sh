@@ -34,30 +34,8 @@ else
     exit
 fi
 
-# Check if KSU flag is provided
-if [[ "$*" == *"--ksu"* ]]; then
-    KSU="true"
-else
-    KSU="false"
-fi
-
-# Check the value of KSU
-if [ "$KSU" == "true" ]; then
-    ZIP_NAME="Lavender_KSU_"$DEVICE_NAME"_"$DEVICE_MODEL"_"$(date +%d%m%y-%H%M)""
-    if [ -d "KernelSU" ]; then
-        echo "KernelSU exists"
-    else
-        echo "KernelSU not found !"
-        echo "Fetching ...."
-        curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s v0.9.5
-    fi
-elif [ "$KSU" == "false" ]; then
-    echo "KSU disabled"
-    ZIP_NAME="Lavender_"$DEVICE_NAME"_"$DEVICE_MODEL"_"$(date +%d%m%y-%H%M)""
-    if [ -d "KernelSU" ]; then
-        git reset HEAD --hard
-    fi
-fi
+echo "Patch the kernel"
+ZIP_NAME="Lavender_"$DEVICE_NAME"_"$DEVICE_MODEL"_"$(date +%d%m%y-%H%M)""
 
 make $MAKE_PARAMS $DEFCONFIG
 make $MAKE_PARAMS

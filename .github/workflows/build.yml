@@ -47,11 +47,6 @@ jobs:
         run: |
           make mrproper ARCH=arm64 LLVM=1
           
-      - name: Build Kernel With KSU
-        run: |
-          source ./build_script.sh ${{ matrix.target }} --ksu
-          cp ./AnyKernel3/Lavender* ./
-          
       - name: Publish to GitHub
         uses: softprops/action-gh-release@v1
         with:
