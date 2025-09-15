@@ -1411,12 +1411,19 @@ static void device_links_purge(struct device *dev)
 	device_links_write_unlock();
 }
 
+#ifdef CONFIG_QGKI
+extern int i2c_gpio_init_done;
+#endif
 static void fw_devlink_link_device(struct device *dev)
 {
 	int fw_ret;
 
 	mutex_lock(&defer_fw_devlink_lock);
-	if (!defer_fw_devlink_count)
+	if (!defer_fw_devlink_count
+#ifdef CONFIG_QGKI
+		&& i2c_gpio_init_done
+#endif
+)
 		device_link_add_missing_supplier_links();
 
 	/*
@@ -1568,6 +1575,18 @@ int lock_device_hotplug_sysfs(void)
 	msleep(5);
 	return restart_syscall();
 }
+
+int trylock_device_hotplug(void)
+{
+	return mutex_trylock(&device_hotplug_lock);
+}
+
+#ifdef CONFIG_SCHED_WALT
+void lock_device_hotplug_assert(void)
+{
+	lockdep_assert_held(&device_hotplug_lock);
+}
+#endif
 
 #ifdef CONFIG_BLOCK
 static inline int device_is_not_partition(struct device *dev)

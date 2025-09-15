@@ -24,6 +24,10 @@
 #include <linux/preempt.h>
 #include <linux/hugetlb.h>
 
+#ifdef CONFIG_TLB_CONF_HANDLER
+#include <linux/qcom_scm.h>
+#endif
+
 #include <asm/acpi.h>
 #include <asm/bug.h>
 #include <asm/cmpxchg.h>
@@ -38,6 +42,8 @@
 #include <asm/pgtable.h>
 #include <asm/tlbflush.h>
 #include <asm/traps.h>
+
+#include <linux/sec_debug.h>
 
 struct fault_info {
 	int	(*fn)(unsigned long addr, unsigned int esr,
@@ -145,15 +151,26 @@ static void show_pte(unsigned long addr)
 	} else {
 		pr_alert("[%016lx] address between user and kernel address ranges\n",
 			 addr);
+#if IS_ENABLED(CONFIG_SEC_USER_RESET_DEBUG)
+		sec_debug_store_pte((unsigned long)addr, 1);
+#endif	
 		return;
 	}
 
 	pr_alert("%s pgtable: %luk pages, %llu-bit VAs, pgdp=%016lx\n",
 		 mm == &init_mm ? "swapper" : "user", PAGE_SIZE / SZ_1K,
 		 vabits_actual, mm_to_pgd_phys(mm));
+#if IS_ENABLED(CONFIG_SEC_USER_RESET_DEBUG)
+	sec_debug_store_pte((unsigned long)mm_to_pgd_phys(mm), 0);
+#endif	
+
 	pgdp = pgd_offset(mm, addr);
 	pgd = READ_ONCE(*pgdp);
 	pr_alert("[%016lx] pgd=%016llx", addr, pgd_val(pgd));
+#if IS_ENABLED(CONFIG_SEC_USER_RESET_DEBUG)
+	sec_debug_store_pte((unsigned long)addr, 1);
+	sec_debug_store_pte((unsigned long)pgd_val(pgd), 2);
+#endif
 
 	do {
 		pud_t *pudp, pud;
@@ -166,18 +183,27 @@ static void show_pte(unsigned long addr)
 		pudp = pud_offset(pgdp, addr);
 		pud = READ_ONCE(*pudp);
 		pr_cont(", pud=%016llx", pud_val(pud));
+#if IS_ENABLED(CONFIG_SEC_USER_RESET_DEBUG)
+		sec_debug_store_pte((unsigned long)pud_val(pud), 3);
+#endif
 		if (pud_none(pud) || pud_bad(pud))
 			break;
 
 		pmdp = pmd_offset(pudp, addr);
 		pmd = READ_ONCE(*pmdp);
 		pr_cont(", pmd=%016llx", pmd_val(pmd));
+#if IS_ENABLED(CONFIG_SEC_USER_RESET_DEBUG)
+		sec_debug_store_pte((unsigned long)pmd_val(pmd), 4);
+#endif
 		if (pmd_none(pmd) || pmd_bad(pmd))
 			break;
 
 		ptep = pte_offset_map(pmdp, addr);
 		pte = READ_ONCE(*ptep);
 		pr_cont(", pte=%016llx", pte_val(pte));
+#if IS_ENABLED(CONFIG_SEC_USER_RESET_DEBUG)
+		sec_debug_store_pte((unsigned long)pte_val(pte), 5);
+#endif
 		pte_unmap(ptep);
 	} while(0);
 
@@ -326,11 +352,19 @@ static void __do_kernel_fault(unsigned long addr, unsigned int esr,
 		msg = "paging request";
 	}
 
+#if IS_ENABLED(CONFIG_SEC_USER_RESET_DEBUG)
+	sec_debug_store_extc_idx(false);
+#endif
 	die_kernel_fault(msg, addr, esr, regs);
 }
 
 static void set_thread_esr(unsigned long address, unsigned int esr)
 {
+	if (IS_ENABLED(CONFIG_SEC_DEBUG) && current->pid == 0x1) {
+		pr_err("[%s] trap before tragedy\n", current->comm);
+		panic("init");
+	}
+
 	current->thread.fault_address = address;
 
 	/*
@@ -406,10 +440,9 @@ static void do_bad_area(unsigned long addr, unsigned int esr, struct pt_regs *re
 #define VM_FAULT_BADMAP		((__force vm_fault_t)0x010000)
 #define VM_FAULT_BADACCESS	((__force vm_fault_t)0x020000)
 
-static vm_fault_t __do_page_fault(struct mm_struct *mm, unsigned long addr,
+static int __do_page_fault(struct vm_area_struct *vma, unsigned long addr,
 			   unsigned int mm_flags, unsigned long vm_flags)
 {
-	struct vm_area_struct *vma = find_vma(mm, addr);
 
 	if (unlikely(!vma))
 		return VM_FAULT_BADMAP;
@@ -456,6 +489,7 @@ static int __kprobes do_page_fault(unsigned long addr, unsigned int esr,
 	vm_fault_t fault, major = 0;
 	unsigned long vm_flags = VM_READ | VM_WRITE | VM_EXEC;
 	unsigned int mm_flags = FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_KILLABLE;
+	struct vm_area_struct *vma = NULL;
 
 	if (kprobe_page_fault(regs, esr))
 		return 0;
@@ -496,6 +530,14 @@ static int __kprobes do_page_fault(unsigned long addr, unsigned int esr,
 	perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS, 1, regs, addr);
 
 	/*
+	 * let's try a speculative page fault without grabbing the
+	 * mmap_sem.
+	 */
+	fault = handle_speculative_fault(mm, addr, mm_flags, &vma);
+	if (fault != VM_FAULT_RETRY)
+		goto done;
+
+	/*
 	 * As per x86, we may deadlock here. However, since the kernel only
 	 * validly references user space from well defined areas of the code,
 	 * we can bug out early if this is from code which shouldn't.
@@ -519,7 +561,10 @@ retry:
 #endif
 	}
 
-	fault = __do_page_fault(mm, addr, mm_flags, vm_flags);
+	if (!vma || !can_reuse_spf_vma(vma, addr))
+		vma = find_vma(mm, addr);
+
+	fault = __do_page_fault(vma, addr, mm_flags, vm_flags);
 	major |= fault & VM_FAULT_MAJOR;
 
 	if (fault & VM_FAULT_RETRY) {
@@ -542,10 +587,19 @@ retry:
 		if (mm_flags & FAULT_FLAG_ALLOW_RETRY) {
 			mm_flags &= ~FAULT_FLAG_ALLOW_RETRY;
 			mm_flags |= FAULT_FLAG_TRIED;
+
+			/*
+			 * Do not try to reuse this vma and fetch it
+			 * again since we will release the mmap_sem.
+			 */
+			vma = NULL;
+
 			goto retry;
 		}
 	}
 	up_read(&mm->mmap_sem);
+
+done:
 
 	/*
 	 * Handle the "normal" (no error) case first.
@@ -671,6 +725,15 @@ static int do_sea(unsigned long addr, unsigned int esr, struct pt_regs *regs)
 	return 0;
 }
 
+#ifdef CONFIG_TLB_CONF_HANDLER
+static int do_tlb_conf_fault(unsigned long addr, unsigned int esr, struct pt_regs *regs)
+{
+	if (qcom_scm_tlb_conf_handler(addr))
+		return 1;
+	return 0;
+}
+#endif
+
 static const struct fault_info fault_info[] = {
 	{ do_bad,		SIGKILL, SI_KERNEL,	"ttbr address size fault"	},
 	{ do_bad,		SIGKILL, SI_KERNEL,	"level 1 address size fault"	},
@@ -720,7 +783,11 @@ static const struct fault_info fault_info[] = {
 	{ do_bad,		SIGKILL, SI_KERNEL,	"unknown 45"			},
 	{ do_bad,		SIGKILL, SI_KERNEL,	"unknown 46"			},
 	{ do_bad,		SIGKILL, SI_KERNEL,	"unknown 47"			},
+#ifdef CONFIG_TLB_CONF_HANDLER
+	{ do_tlb_conf_fault,	SIGKILL, SI_KERNEL,	"TLB conflict abort"		},
+#else
 	{ do_bad,		SIGKILL, SI_KERNEL,	"TLB conflict abort"		},
+#endif
 	{ do_bad,		SIGKILL, SI_KERNEL,	"Unsupported atomic hardware update fault"	},
 	{ do_bad,		SIGKILL, SI_KERNEL,	"unknown 50"			},
 	{ do_bad,		SIGKILL, SI_KERNEL,	"unknown 51"			},
@@ -743,6 +810,10 @@ asmlinkage void __exception do_mem_abort(unsigned long addr, unsigned int esr,
 {
 	const struct fault_info *inf = esr_to_fault_info(esr);
 
+#if IS_ENABLED(CONFIG_SEC_USER_RESET_DEBUG)
+	if (!user_mode(regs))
+		sec_debug_save_fault_info(esr, inf->name, addr, 0UL);
+#endif
 	if (!inf->fn(addr, esr, regs))
 		return;
 
@@ -788,7 +859,10 @@ asmlinkage void __exception do_sp_pc_abort(unsigned long addr,
 			arm64_apply_bp_hardening();
 		local_daif_restore(DAIF_PROCCTX);
 	}
-
+#if IS_ENABLED(CONFIG_SEC_USER_RESET_DEBUG)
+	sec_debug_save_fault_info(esr, esr_get_class_string(esr),
+			(unsigned long)regs->pc, (unsigned long)regs->sp);
+#endif
 	arm64_notify_die("SP/PC alignment exception", regs,
 			 SIGBUS, BUS_ADRALN, (void __user *)addr, esr);
 }
@@ -911,6 +985,9 @@ asmlinkage void __exception do_debug_exception(unsigned long addr_if_watchpoint,
 	if (cortex_a76_erratum_1463225_debug_handler(regs))
 		return;
 
+#if IS_ENABLED(CONFIG_SEC_USER_RESET_DEBUG)
+	sec_debug_save_fault_info(esr, inf->name, addr_if_watchpoint, 0UL);
+#endif
 	debug_exception_enter(regs);
 
 	if (user_mode(regs) && !is_ttbr0_addr(pc))

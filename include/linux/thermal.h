@@ -5,6 +5,7 @@
  *  Copyright (C) 2008  Intel Corp
  *  Copyright (C) 2008  Zhang Rui <rui.zhang@intel.com>
  *  Copyright (C) 2008  Sujith Thomas <sujith.thomas@intel.com>
+ *  Copyright (c) 2019, The Linux Foundation. All rights reserved.
  */
 
 #ifndef __THERMAL_H__
@@ -17,6 +18,22 @@
 #include <linux/workqueue.h>
 #include <uapi/linux/thermal.h>
 
+#if IS_ENABLED(CONFIG_SEC_PM)
+#include <linux/ipc_logging.h>
+extern void *thermal_ipc_log;
+#define THERMAL_IPC_LOG(msg, ...)						\
+	do {								\
+		if (thermal_ipc_log)					\
+			ipc_log_string(thermal_ipc_log, msg, ##__VA_ARGS__);	\
+	} while (0)
+
+/* SS THERMAL LOG */
+#if IS_ENABLED(CONFIG_SEC_THERMAL_LOG)
+void ss_thermal_log_init(void);
+void ss_thermal_print(const char *fmt, ...);
+#endif
+#endif
+
 #define THERMAL_TRIPS_NONE	-1
 #define THERMAL_MAX_TRIPS	12
 
@@ -25,6 +42,9 @@
 
 /* No upper/lower limit requirement */
 #define THERMAL_NO_LIMIT	((u32)~0)
+
+/* upper limit requirement */
+#define THERMAL_MAX_LIMIT	(THERMAL_NO_LIMIT - 1)
 
 /* Default weight of a bound cooling device */
 #define THERMAL_WEIGHT_DEFAULT 0
@@ -440,6 +460,15 @@ int thermal_zone_unbind_cooling_device(struct thermal_zone_device *, int,
 				       struct thermal_cooling_device *);
 void thermal_zone_device_update(struct thermal_zone_device *,
 				enum thermal_notify_event);
+#ifdef CONFIG_QTI_THERMAL
+void thermal_zone_device_update_temp(struct thermal_zone_device *tz,
+				enum thermal_notify_event event, int temp);
+#else
+static inline void thermal_zone_device_update_temp(
+		struct thermal_zone_device *tz, enum thermal_notify_event event,
+		int temp)
+{ }
+#endif
 void thermal_zone_set_trips(struct thermal_zone_device *);
 
 struct thermal_cooling_device *thermal_cooling_device_register(const char *,

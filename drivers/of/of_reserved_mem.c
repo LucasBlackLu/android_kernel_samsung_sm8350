@@ -45,6 +45,7 @@ static int __init early_init_dt_alloc_reserved_memory_arch(phys_addr_t size,
 	return memblock_reserve(base, size);
 }
 
+static bool rmem_overflow;
 /**
  * res_mem_save_node() - save fdt node for second pass initialization
  */
@@ -55,6 +56,7 @@ void __init fdt_reserved_mem_save_node(unsigned long node, const char *uname,
 
 	if (reserved_mem_count == ARRAY_SIZE(reserved_mem)) {
 		pr_err("not enough space all defined regions.\n");
+		rmem_overflow = true;
 		return;
 	}
 
@@ -213,6 +215,7 @@ static int __init __rmem_cmp(const void *a, const void *b)
 	return 0;
 }
 
+static bool rmem_overlap;
 static void __init __rmem_check_for_overlap(void)
 {
 	int i;
@@ -236,6 +239,7 @@ static void __init __rmem_check_for_overlap(void)
 			pr_err("OVERLAP DETECTED!\n%s (%pa--%pa) overlaps with %s (%pa--%pa)\n",
 			       this->name, &this->base, &this_end,
 			       next->name, &next->base, &next_end);
+			rmem_overlap = true;
 		}
 	}
 }
@@ -256,9 +260,10 @@ void __init fdt_init_reserved_mem(void)
 		int len;
 		const __be32 *prop;
 		int err = 0;
-		int nomap;
+		int nomap, reusable;
 
 		nomap = of_get_flat_dt_prop(node, "no-map", NULL) != NULL;
+		reusable = of_get_flat_dt_prop(node, "reusable", NULL) != NULL;
 		prop = of_get_flat_dt_prop(node, "phandle", &len);
 		if (!prop)
 			prop = of_get_flat_dt_prop(node, "linux,phandle", &len);
@@ -276,6 +281,14 @@ void __init fdt_init_reserved_mem(void)
 				memblock_free(rmem->base, rmem->size);
 				if (nomap)
 					memblock_add(rmem->base, rmem->size);
+			} else {
+#ifdef CONFIG_ION_RBIN_HEAP
+				if (of_get_flat_dt_prop(node, "ion,recyclable", NULL))
+					reusable = true;
+#endif
+				memblock_memsize_record(rmem->name, rmem->base,
+							rmem->size, nomap,
+							reusable);
 			}
 		}
 	}
@@ -396,6 +409,56 @@ void of_reserved_mem_device_release(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(of_reserved_mem_device_release);
 
+#ifdef CONFIG_OF_RESERVED_MEM_CHECK
+/**
+ * of_reserved_mem_device_is_init() - test if a device's reserved memory
+ *				      will be used in DMA allocations
+ * @dev: device we want to perform test on
+ *
+ * Check if a device and its reserved memory region (if it has one) have
+ * been associated with one another through a call to
+ * of_reserved_mem_device_init_by_idx().
+ *
+ * Return false if the device has reserved memory and it's not in use, true
+ * otherwise.
+ */
+bool of_reserved_mem_device_is_init(struct device *dev)
+{
+	struct device_node *mem_dev_node;
+	struct rmem_assigned_device *rd;
+	struct reserved_mem *rmem;
+	bool ret = false;
+
+	if (!dev->of_node)
+		return true;
+
+	mem_dev_node = of_parse_phandle(dev->of_node, "memory-region", 0);
+	if (!mem_dev_node)
+		return true;
+
+	if (!of_device_is_available(mem_dev_node))
+		goto exit;
+
+	rmem = __find_rmem(mem_dev_node);
+	if (!rmem || !rmem->ops)
+		goto exit;
+	of_node_put(mem_dev_node);
+
+	mutex_lock(&of_rmem_assigned_device_mutex);
+	list_for_each_entry(rd, &of_rmem_assigned_device_list, list) {
+		if (rd->dev == dev) {
+			ret = true;
+			break;
+		}
+	}
+	mutex_unlock(&of_rmem_assigned_device_mutex);
+	return ret;
+exit:
+	of_node_put(mem_dev_node);
+	return true;
+}
+#endif /* CONFIG_OF_RESERVED_MEM_CHECK */
+
 /**
  * of_reserved_mem_lookup() - acquire reserved_mem from a device node
  * @np:		node pointer of the desired reserved-memory region
@@ -421,3 +484,13 @@ struct reserved_mem *of_reserved_mem_lookup(struct device_node *np)
 	return NULL;
 }
 EXPORT_SYMBOL_GPL(of_reserved_mem_lookup);
+
+static int check_reserved_mem(void)
+{
+	if (rmem_overflow)
+		panic("overflow on reserved memory, check the latest change");
+	if (rmem_overlap)
+		panic("overlap on reserved memory, check the latest change");
+	return 0;
+}
+late_initcall(check_reserved_mem);

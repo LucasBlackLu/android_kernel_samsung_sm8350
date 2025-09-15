@@ -118,8 +118,7 @@ static u16 mt7601u_rx_next_seg_len(u8 *data, u32 data_len)
 	if (data_len < min_seg_len ||
 	    WARN_ON_ONCE(!dma_len) ||
 	    WARN_ON_ONCE(dma_len + MT_DMA_HDRS > data_len) ||
-	    WARN_ON_ONCE(dma_len & 0x3) ||
-	    WARN_ON_ONCE(dma_len < min_seg_len))
+	    WARN_ON_ONCE(dma_len & 0x3))
 		return 0;
 
 	return MT_DMA_HDRS + dma_len;
@@ -153,7 +152,8 @@ mt7601u_rx_process_entry(struct mt7601u_dev *dev, struct mt7601u_dma_buf_rx *e)
 
 	if (new_p) {
 		/* we have one extra ref from the allocator */
-		put_page(e->p);
+		__free_pages(e->p, MT_RX_ORDER);
+
 		e->p = new_p;
 	}
 }
@@ -310,6 +310,7 @@ static int mt7601u_dma_submit_tx(struct mt7601u_dev *dev,
 	}
 
 	e = &q->e[q->end];
+	e->skb = skb;
 	usb_fill_bulk_urb(e->urb, usb_dev, snd_pipe, skb->data, skb->len,
 			  mt7601u_complete_tx, q);
 	ret = usb_submit_urb(e->urb, GFP_ATOMIC);
@@ -327,7 +328,6 @@ static int mt7601u_dma_submit_tx(struct mt7601u_dev *dev,
 
 	q->end = (q->end + 1) % q->entries;
 	q->used++;
-	e->skb = skb;
 
 	if (q->used >= q->entries)
 		ieee80211_stop_queue(dev->hw, skb_get_queue_mapping(skb));

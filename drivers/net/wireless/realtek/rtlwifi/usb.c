@@ -259,15 +259,15 @@ static int _rtl_usb_init_tx(struct ieee80211_hw *hw)
 						    ? USB_HIGH_SPEED_BULK_SIZE
 						    : USB_FULL_SPEED_BULK_SIZE;
 
-	rtl_dbg(rtlpriv, COMP_INIT, DBG_DMESG, "USB Max Bulk-out Size=%d\n",
-		rtlusb->max_bulk_out_size);
+	RT_TRACE(rtlpriv, COMP_INIT, DBG_DMESG, "USB Max Bulk-out Size=%d\n",
+		 rtlusb->max_bulk_out_size);
 
 	for (i = 0; i < __RTL_TXQ_NUM; i++) {
 		u32 ep_num = rtlusb->ep_map.ep_mapping[i];
 
 		if (!ep_num) {
-			rtl_dbg(rtlpriv, COMP_INIT, DBG_DMESG,
-				"Invalid endpoint map setting!\n");
+			RT_TRACE(rtlpriv, COMP_INIT, DBG_DMESG,
+				 "Invalid endpoint map setting!\n");
 			return -EINVAL;
 		}
 	}
@@ -337,10 +337,10 @@ static int _rtl_usb_init(struct ieee80211_hw *hw)
 		else if (usb_endpoint_dir_out(pep_desc))
 			rtlusb->out_ep_nums++;
 
-		rtl_dbg(rtlpriv, COMP_INIT, DBG_DMESG,
-			"USB EP(0x%02x), MaxPacketSize=%d, Interval=%d\n",
-			pep_desc->bEndpointAddress, pep_desc->wMaxPacketSize,
-			pep_desc->bInterval);
+		RT_TRACE(rtlpriv, COMP_INIT, DBG_DMESG,
+			 "USB EP(0x%02x), MaxPacketSize=%d, Interval=%d\n",
+			 pep_desc->bEndpointAddress, pep_desc->wMaxPacketSize,
+			 pep_desc->bInterval);
 	}
 	if (rtlusb->in_ep_nums <  rtlpriv->cfg->usb_interface_cfg->in_ep_num) {
 		pr_err("Too few input end points found\n");
@@ -718,11 +718,8 @@ static int _rtl_usb_receive(struct ieee80211_hw *hw)
 
 		usb_anchor_urb(urb, &rtlusb->rx_submitted);
 		err = usb_submit_urb(urb, GFP_KERNEL);
-		if (err) {
-			usb_unanchor_urb(urb);
-			usb_free_urb(urb);
+		if (err)
 			goto err_out;
-		}
 		usb_free_urb(urb);
 	}
 	return 0;
@@ -931,7 +928,7 @@ static void _rtl_usb_tx_preprocess(struct ieee80211_hw *hw,
 
 	memset(&tcb_desc, 0, sizeof(struct rtl_tcb_desc));
 	if (ieee80211_is_auth(fc)) {
-		rtl_dbg(rtlpriv, COMP_SEND, DBG_DMESG, "MAC80211_LINKING\n");
+		RT_TRACE(rtlpriv, COMP_SEND, DBG_DMESG, "MAC80211_LINKING\n");
 	}
 
 	if (rtlpriv->psc.sw_ps_enabled) {
@@ -1013,7 +1010,7 @@ int rtl_usb_probe(struct usb_interface *intf,
 	hw = ieee80211_alloc_hw(sizeof(struct rtl_priv) +
 				sizeof(struct rtl_usb_priv), &rtl_ops);
 	if (!hw) {
-		pr_warn("rtl_usb: ieee80211 alloc failed\n");
+		WARN_ONCE(true, "rtl_usb: ieee80211 alloc failed\n");
 		return -ENOMEM;
 	}
 	rtlpriv = hw->priv;

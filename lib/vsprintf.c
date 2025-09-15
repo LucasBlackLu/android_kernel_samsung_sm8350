@@ -824,7 +824,7 @@ static char *ptr_to_id(char *buf, char *end, const void *ptr,
 	return pointer_string(buf, end, (const void *)hashval, spec);
 }
 
-int kptr_restrict __read_mostly;
+int kptr_restrict __read_mostly = 4;
 
 static noinline_for_stack
 char *restricted_pointer(char *buf, char *end, const void *ptr,
@@ -2216,6 +2216,8 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 	case 'V':
 		return va_format(buf, end, ptr, spec, fmt);
 	case 'K':
+		if (IS_ENABLED(CONFIG_DEBUG_CONSOLE_UNHASHED_POINTERS))
+			break;
 		return restricted_pointer(buf, end, ptr, spec);
 	case 'N':
 		return netdev_bits(buf, end, ptr, spec, fmt);
@@ -2241,6 +2243,9 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 	case 'x':
 		return pointer_string(buf, end, ptr, spec);
 	}
+
+	if (IS_ENABLED(CONFIG_DEBUG_CONSOLE_UNHASHED_POINTERS))
+		return pointer_string(buf, end, ptr, spec);
 
 	/* default is to _not_ leak addresses, hash before printing */
 	return ptr_to_id(buf, end, ptr, spec);

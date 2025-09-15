@@ -230,4 +230,82 @@ source "drivers/interconnect/Kconfig"
 
 source "drivers/counter/Kconfig"
 
+# Samsung
+
+source "drivers/adsp_factory/Kconfig"
+
+source "drivers/battery/charger/max77705_charger/Kconfig"
+
+source "drivers/battery/charger/pca9468_charger/Kconfig"
+
+source "drivers/battery/common/Kconfig"
+
+source "drivers/battery/fuelgauge/max77705_fuelgauge/Kconfig"
+
+source "drivers/battery/wireless/Kconfig"
+
+source "drivers/fingerprint/Kconfig"
+
+source "drivers/hwmon/sec_thermistor/Kconfig"
+
+source "drivers/input/input_boost/Kconfig"
+
+source "drivers/input/misc/hall/Kconfig"
+
+source "drivers/input/sec_input/Kconfig"
+
+source "drivers/input/sec_input/slsi/Kconfig"
+
+source "drivers/knox/Kconfig"
+
+source "drivers/kperfmon/Kconfig"
+
+source "drivers/mfd/maxim/Kconfig"
+
+source "drivers/misc/drb/Kconfig"
+
+source "drivers/muic/common/Kconfig"
+
+source "drivers/net/dropdump/Kconfig"
+
+source "drivers/nfc/nfc_logger/Kconfig"
+
+source "drivers/nfc/snvm/Kconfig"
+
+source "drivers/optics/Kconfig"
+
+source "drivers/perf_mgr/Kconfig"
+
+source "drivers/pwm/pwm-gpclk/Kconfig"
+
+source "drivers/regulator/pmic_class/Kconfig"
+
+source "drivers/regulator/s2mpb02/Kconfig"
+
+source "drivers/samsung/Kconfig"
+
+source "drivers/security/samsung/five_tee_driver/Kconfig"
+
+source "drivers/security/samsung/icdrv/Kconfig"
+
+source "drivers/security/samsung/tzic/Kconfig"
+
+source "drivers/sensors/Kconfig"
+
+source "drivers/spu_verify/Kconfig"
+
+source "drivers/sti/abc/Kconfig"
+
+source "drivers/sti/common/Kconfig"
+
+source "drivers/usb/typec/common/Kconfig"
+
+source "drivers/usb/typec/manager/Kconfig"
+
+source "drivers/usb/typec/maxim/Kconfig"
+
+source "drivers/vibrator/common/Kconfig"
+
+source "drivers/vibrator/maxim/Kconfig"
+
 endmenu

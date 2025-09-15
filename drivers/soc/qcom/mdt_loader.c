@@ -92,10 +92,16 @@ void *qcom_mdt_read_metadata(const struct firmware *fw, size_t *data_len)
 	size_t ehdr_size;
 	void *data;
 
+	if (fw->size < sizeof(struct elf32_hdr)) {
+		dev_err(dev, "Image is too small\n");
+		return ERR_PTR(-EINVAL);
+	}
+
 	ehdr = (struct elf32_hdr *)fw->data;
 	phdrs = (struct elf32_phdr *)(ehdr + 1);
 
-	if (ehdr->e_phnum < 2)
+	if (ehdr->e_phnum < 2 || ehdr->e_phoff > fw->size ||
+	    (sizeof(phdrs) * ehdr->e_phnum > fw->size - ehdr->e_phoff))
 		return ERR_PTR(-EINVAL);
 
 	if (phdrs[0].p_type == PT_LOAD)
@@ -106,6 +112,10 @@ void *qcom_mdt_read_metadata(const struct firmware *fw, size_t *data_len)
 
 	ehdr_size = phdrs[0].p_filesz;
 	hash_size = phdrs[1].p_filesz;
+
+	/* Overflow check */
+	if (ehdr_size >  SIZE_MAX - hash_size)
+		return ERR_PTR(-ENOMEM);
 
 	data = kmalloc(ehdr_size + hash_size, GFP_KERNEL);
 	if (!data)

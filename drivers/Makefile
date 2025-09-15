@@ -41,6 +41,8 @@ obj-$(CONFIG_DMADEVICES)	+= dma/
 # SOC specific infrastructure drivers.
 obj-y				+= soc/
 
+obj-y				+= samsung/
+
 obj-$(CONFIG_VIRTIO)		+= virtio/
 obj-$(CONFIG_XEN)		+= xen/
 
@@ -186,3 +188,42 @@ obj-$(CONFIG_SIOX)		+= siox/
 obj-$(CONFIG_GNSS)		+= gnss/
 obj-$(CONFIG_INTERCONNECT)	+= interconnect/
 obj-$(CONFIG_COUNTER)		+= counter/
+
+# Samsung
+obj-$(CONFIG_ADSP_FACTORY)  += adsp_factory/
+obj-$(CONFIG_FASTUH)        += fastuh/
+obj-$(CONFIG_SENSORS_SSC)   += sensors/
+obj-$(CONFIG_SPU_VERIFY) += spu_verify/
+obj-y += battery/charger/max77705_charger/
+obj-y += battery/charger/pca9468_charger/
+obj-y += battery/common/
+obj-y += battery/fuelgauge/max77705_fuelgauge/
+obj-y += battery/wireless/
+obj-y += fingerprint/
+obj-y += hwmon/sec_thermistor/
+obj-y += input/input_boost/
+obj-y += input/misc/hall/
+obj-y += input/sec_input/
+obj-y += input/sec_input/slsi/
+obj-y += knox/
+obj-y += kperfmon/
+obj-y += mfd/maxim/
+obj-y += misc/drb/
+obj-y += muic/common/
+obj-y += net/dropdump/
+obj-y += nfc/nfc_logger/
+obj-y += nfc/snvm/
+obj-y += optics/
+obj-y += perf_mgr/
+obj-y += pwm/pwm-gpclk/
+obj-y += regulator/pmic_class/
+obj-y += regulator/s2mpb02/
+obj-y += security/samsung/five_tee_driver/
+obj-y += security/samsung/icdrv/
+obj-y += security/samsung/tzic/
+obj-y += sti/abc/
+obj-y += usb/typec/common/
+obj-y += usb/typec/manager/
+obj-y += usb/typec/maxim/
+obj-y += vibrator/common/
+obj-y += vibrator/maxim/

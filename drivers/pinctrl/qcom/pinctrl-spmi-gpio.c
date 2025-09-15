@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, 2016-2020 The Linux Foundation. All rights reserved.
  */
 
 #include <linux/gpio/driver.h>
@@ -14,6 +14,7 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/spmi.h>
 #include <linux/types.h>
 
 #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
@@ -171,6 +172,8 @@ struct pmic_gpio_state {
 	struct pinctrl_dev *ctrl;
 	struct gpio_chip chip;
 	struct irq_chip irq;
+	u8 usid;
+	u8 pid_base;
 };
 
 static const struct pinconf_generic_params pmic_gpio_bindings[] = {
@@ -424,6 +427,9 @@ static int pmic_gpio_config_get(struct pinctrl_dev *pctldev,
 			return -EINVAL;
 		arg = 1;
 		break;
+	case PIN_CONFIG_OUTPUT_ENABLE:
+		arg = pad->output_enabled;
+		break;
 	case PIN_CONFIG_OUTPUT:
 		arg = pad->out_value;
 		break;
@@ -503,6 +509,9 @@ static int pmic_gpio_config_set(struct pinctrl_dev *pctldev, unsigned int pin,
 		case PIN_CONFIG_INPUT_ENABLE:
 			pad->input_enabled = arg ? true : false;
 			break;
+		case PIN_CONFIG_OUTPUT_ENABLE:
+			pad->output_enabled = arg ? true : false;
+			break;
 		case PIN_CONFIG_OUTPUT:
 			pad->output_enabled = true;
 			pad->out_value = arg;
@@ -513,7 +522,7 @@ static int pmic_gpio_config_set(struct pinctrl_dev *pctldev, unsigned int pin,
 			pad->pullup = arg;
 			break;
 		case PMIC_GPIO_CONF_STRENGTH:
-			if (arg > PMIC_GPIO_STRENGTH_LOW)
+			if (arg > PMIC_GPIO_STRENGTH_HIGH)
 				return -EINVAL;
 			pad->strength = arg;
 			break;
@@ -677,11 +686,90 @@ static void pmic_gpio_config_dbg_show(struct pinctrl_dev *pctldev,
 	}
 }
 
+#if IS_ENABLED(CONFIG_SEC_PM)
+static void pmic_gpio_sec_dbg_show(struct pinctrl_dev *pctldev,
+				      struct seq_file *s)
+{
+	struct pmic_gpio_state *state = pinctrl_dev_get_drvdata(pctldev);
+	struct pmic_gpio_pad *pad;
+	int val, i, ret, function;
+
+	static const char *const biases[] = {
+		"pull-up 30uA", "pull-up 1.5uA", "pull-up 31.5uA",
+		"pull-up 1.5uA + 30uA boost", "pull-down 10uA", "no pull"
+	};
+	static const char *const buffer_types[] = {
+		"push-pull", "open-drain", "open-source"
+	};
+	static const char *const strengths[] = {
+		"no", "high", "medium", "low"
+	};
+
+	for (i = 0; i < state->chip.ngpio; i++) {
+		pad = pctldev->desc->pins[i].drv_data;
+		val = pmic_gpio_read(state, pad, PMIC_GPIO_REG_EN_CTL);
+		
+		if (val < 0 || !(val >> PMIC_GPIO_REG_MASTER_EN_SHIFT)) {
+			if (IS_ERR_OR_NULL(s))
+				pr_info(" gpio%-2d: ---\n", i + 1);
+			else
+				seq_printf(s, " gpio%-2d: ---\n", i + 1);
+		} else {
+			if (pad->input_enabled) {
+				ret = pmic_gpio_read(state, pad, PMIC_MPP_REG_RT_STS);
+				if (ret < 0)
+					continue;
+
+				ret &= PMIC_MPP_REG_RT_STS_VAL_MASK;
+				pad->out_value = ret;
+			}
+
+			if (!pad->lv_mv_type &&
+				pad->function >= PMIC_GPIO_FUNC_INDEX_FUNC3) {
+				function = pad->function + (PMIC_GPIO_FUNC_INDEX_DTEST1 -
+					PMIC_GPIO_FUNC_INDEX_FUNC3);
+			} else {
+				function = pad->function;
+			}
+
+			if (IS_ERR_OR_NULL(s)) {
+				pr_info(" gpio%-2d: %-7s %-4s vin-%d %-7s %-2s %-7s atest-%d dtest-%d\n",
+						   i + 1,
+						   pmic_gpio_functions[function],
+						   pad->output_enabled ? "OUT" : "IN",
+						   pad->power_source,
+						   biases[pad->pullup],
+						   buffer_types[pad->buffer_type],
+						   pad->out_value ? "H" : "L",
+						   strengths[pad->strength],
+						   pad->atest,
+						   pad->dtest_buffer);
+			} else {
+				seq_printf(s, " gpio%-2d: %-7s %-4s vin-%d %-7s %-2s %-7s atest-%d dtest-%d\n",
+						   i + 1,
+						   pmic_gpio_functions[function],
+						   pad->output_enabled ? "OUT" : "IN",
+						   pad->power_source,
+						   biases[pad->pullup],
+						   buffer_types[pad->buffer_type],
+						   pad->out_value ? "H" : "L",
+						   strengths[pad->strength],
+						   pad->atest,
+						   pad->dtest_buffer);
+			}
+		}
+	}
+}
+#endif
+
 static const struct pinconf_ops pmic_gpio_pinconf_ops = {
 	.is_generic			= true,
 	.pin_config_group_get		= pmic_gpio_config_get,
 	.pin_config_group_set		= pmic_gpio_config_set,
 	.pin_config_group_dbg_show	= pmic_gpio_config_dbg_show,
+#if IS_ENABLED(CONFIG_SEC_PM)
+	.pin_config_sec_dbg_show	= pmic_gpio_sec_dbg_show,
+#endif
 };
 
 static int pmic_gpio_direction_input(struct gpio_chip *chip, unsigned pin)
@@ -949,10 +1037,26 @@ static int pmic_gpio_child_to_parent_hwirq(struct gpio_chip *chip,
 					   unsigned int *parent_hwirq,
 					   unsigned int *parent_type)
 {
-	*parent_hwirq = child_hwirq + 0xc0;
+	struct pmic_gpio_state *state = gpiochip_get_data(chip);
+
+	*parent_hwirq = child_hwirq + state->pid_base;
 	*parent_type = child_type;
 
 	return 0;
+}
+
+static void pmic_gpio_populate_parent_fwspec(struct gpio_chip *chip,
+					     struct irq_fwspec *fwspec,
+					     unsigned int parent_hwirq,
+					     unsigned int parent_type)
+{
+	struct pmic_gpio_state *state = gpiochip_get_data(chip);
+
+	fwspec->param_count = 4;
+	fwspec->param[0] = state->usid;
+	fwspec->param[1] = parent_hwirq;
+	fwspec->param[2] = 0;
+	fwspec->param[3] = parent_type;
 }
 
 static int pmic_gpio_probe(struct platform_device *pdev)
@@ -965,6 +1069,7 @@ static int pmic_gpio_probe(struct platform_device *pdev)
 	struct pmic_gpio_pad *pad, *pads;
 	struct pmic_gpio_state *state;
 	struct gpio_irq_chip *girq;
+	const struct spmi_device *parent_spmi_dev;
 	int ret, npins, i;
 	u32 reg;
 
@@ -984,6 +1089,9 @@ static int pmic_gpio_probe(struct platform_device *pdev)
 
 	state->dev = &pdev->dev;
 	state->map = dev_get_regmap(dev->parent, NULL);
+	parent_spmi_dev = to_spmi_device(dev->parent);
+	state->usid = parent_spmi_dev->usid;
+	state->pid_base = reg >> 8;
 
 	pindesc = devm_kcalloc(dev, npins, sizeof(*pindesc), GFP_KERNEL);
 	if (!pindesc)
@@ -1059,7 +1167,7 @@ static int pmic_gpio_probe(struct platform_device *pdev)
 	girq->fwnode = of_node_to_fwnode(state->dev->of_node);
 	girq->parent_domain = parent_domain;
 	girq->child_to_parent_hwirq = pmic_gpio_child_to_parent_hwirq;
-	girq->populate_parent_fwspec = gpiochip_populate_parent_fwspec_fourcell;
+	girq->populate_parent_fwspec = pmic_gpio_populate_parent_fwspec;
 	girq->child_offset_to_irq = pmic_gpio_child_offset_to_irq;
 	girq->child_irq_domain_ops.translate = pmic_gpio_domain_translate;
 
@@ -1120,6 +1228,23 @@ static const struct of_device_id pmic_gpio_of_match[] = {
 	{ .compatible = "qcom,pm8150b-gpio", .data = (void *) 12 },
 	/* pm8150l has 12 GPIOs with holes on 7 */
 	{ .compatible = "qcom,pm8150l-gpio", .data = (void *) 12 },
+	{ .compatible = "qcom,pm8350-gpio", .data = (void *) 10 },
+	// { .compatible = "qcom,pm8350b-gpio", .data = (void *) 8 },
+	{ .compatible = "qcom,pm8350c-gpio", .data = (void *) 9 },
+	{ .compatible = "qcom,pmk8350-gpio", .data = (void *) 4 },
+	{ .compatible = "qcom,pmr735a-gpio", .data = (void *) 4 },
+	{ .compatible = "qcom,pmr735b-gpio", .data = (void *) 4 },
+	{ .compatible = "qcom,pm7250b-gpio", .data = (void *) 12 },
+	{ .compatible = "qcom,pm6350-gpio", .data = (void *) 9 },
+	{ .compatible = "qcom,pm6150l-gpio", .data = (void *) 12 },
+	{ .compatible = "qcom,pmx65-gpio", .data = (void *) 16 },
+	{ .compatible = "qcom,pmd9650-gpio", .data = (void *) 12 },
+	{ .compatible = "qcom,pm7325-gpio", .data = (void *) 10 },
+	{ .compatible = "qcom,pm7325b-gpio", .data = (void *) 8 },
+	{ .compatible = "qcom,pm2250-gpio", .data = (void *) 10 },
+	{ .compatible = "qcom,pmi632-gpio", .data = (void *) 8 },
+	{ .compatible = "qcom,pm6125-gpio", .data = (void *) 9 },
+	{ .compatible = "qcom,pm5100-gpio", .data = (void *) 16 },
 	{ },
 };
 

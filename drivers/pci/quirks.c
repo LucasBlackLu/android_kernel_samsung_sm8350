@@ -2337,6 +2337,22 @@ DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x10f1, quirk_disable_aspm_l0s);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x10f4, quirk_disable_aspm_l0s);
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_INTEL, 0x1508, quirk_disable_aspm_l0s);
 
+/*
+ * QPS615 PCIe-PCI bridge devices cause AER timeout errors on the upstream
+ * PCIe root port when L0s is enabled in CPE platform with SDX65.
+ * Disable L0s for both QPS615 and SDX65 when QPS615 switch is
+ * present.
+ */
+static void quirk_disable_aspm_qps615_l0s(struct pci_dev *dev)
+{
+	struct pci_dev *p;
+
+	pci_disable_link_state(dev, PCIE_LINK_STATE_L0S);
+	p = pci_get_device(PCI_VENDOR_ID_QCOM, 0x0308, NULL);
+	pci_disable_link_state(p, PCIE_LINK_STATE_L0S);
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_TOSHIBA, 0x0623, quirk_disable_aspm_qps615_l0s);
+
 static void quirk_disable_aspm_l0s_l1(struct pci_dev *dev)
 {
 	pci_info(dev, "Disabling ASPM L0s/L1\n");
@@ -2349,6 +2365,7 @@ static void quirk_disable_aspm_l0s_l1(struct pci_dev *dev)
  * disable both L0s and L1 for now to be safe.
  */
 DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_ASMEDIA, 0x1080, quirk_disable_aspm_l0s_l1);
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_QCOM, 0x1104, quirk_disable_aspm_l0s_l1);
 
 /*
  * Some Pericom PCIe-to-PCI bridges in reverse mode need the PCIe Retrain
@@ -2418,6 +2435,20 @@ DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_NVIDIA,  PCI_DEVICE_ID_NVIDIA_CK804_PCIE,
 			quirk_nvidia_ck804_pcie_aer_ext_cap);
 DECLARE_PCI_FIXUP_RESUME_EARLY(PCI_VENDOR_ID_NVIDIA,  PCI_DEVICE_ID_NVIDIA_CK804_PCIE,
 			quirk_nvidia_ck804_pcie_aer_ext_cap);
+
+/*
+ * Quirk to limit QCOM RC MPS to 128 in case of Realtek 8168
+ * attaches.
+ */
+static void quirk_realtek_rc_mpss_limit(struct pci_dev *pdev)
+{
+	struct pci_dev *root_port = pcie_find_root_port(pdev);
+
+	if (root_port->vendor  == PCI_VENDOR_ID_QCOM)
+		pcie_set_mps(root_port, 128);
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_REALTEK, 0x8168,
+			quirk_realtek_rc_mpss_limit);
 
 static void quirk_via_cx700_pci_parking_caching(struct pci_dev *dev)
 {

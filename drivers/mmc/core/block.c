@@ -939,7 +939,9 @@ static inline int mmc_blk_part_switch(struct mmc_card *card,
 		}
 
 		card->ext_csd.part_config = part_config;
-
+#if defined(CONFIG_SDC_QTI)
+		card->part_curr = part_type;
+#endif
 		ret = mmc_blk_part_switch_post(card, main_md->part_curr);
 	}
 
@@ -1058,6 +1060,9 @@ static int mmc_blk_reset(struct mmc_blk_data *md, struct mmc_host *host,
 			return -ENODEV;
 		}
 	}
+#if IS_ENABLED(CONFIG_SEC_STORAGE_MMC)
+	host->failed_init = err ? true : false;
+#endif
 	return err;
 }
 
@@ -1524,6 +1529,9 @@ static void mmc_blk_cqe_complete_rq(struct mmc_queue *mq, struct request *req)
 	spin_lock_irqsave(&mq->lock, flags);
 
 	mq->in_flight[issue_type] -= 1;
+#if defined(CONFIG_SDC_QTI)
+	atomic_dec(&host->active_reqs);
+#endif
 
 	put_card = (mmc_tot_in_flight(mq) == 0);
 
@@ -1533,6 +1541,10 @@ static void mmc_blk_cqe_complete_rq(struct mmc_queue *mq, struct request *req)
 
 	if (!mq->cqe_busy)
 		blk_mq_run_hw_queues(q, true);
+#if defined(CONFIG_SDC_QTI)
+	mmc_cqe_clk_scaling_stop_busy(host, true,
+				(issue_type == MMC_ISSUE_DCMD));
+#endif
 
 	if (put_card)
 		mmc_put_card(mq->card, &mq->ctx);
@@ -1547,8 +1559,16 @@ void mmc_blk_cqe_recovery(struct mmc_queue *mq)
 	pr_debug("%s: CQE recovery start\n", mmc_hostname(host));
 
 	err = mmc_cqe_recovery(host);
+#if defined(CONFIG_SDC_QTI)
+	if (err || host->need_hw_reset) {
+		mmc_blk_reset(mq->blkdata, host, MMC_BLK_CQE_RECOVERY);
+		if (host->need_hw_reset)
+			host->need_hw_reset = false;
+	}
+#else
 	if (err)
 		mmc_blk_reset(mq->blkdata, host, MMC_BLK_CQE_RECOVERY);
+#endif
 	mmc_blk_reset_success(mq->blkdata, MMC_BLK_CQE_RECOVERY);
 
 	pr_debug("%s: CQE recovery done\n", mmc_hostname(host));
@@ -1629,13 +1649,27 @@ static int mmc_blk_cqe_issue_rw_rq(struct mmc_queue *mq, struct request *req)
 {
 	struct mmc_queue_req *mqrq = req_to_mmc_queue_req(req);
 	struct mmc_host *host = mq->card->host;
+#if defined(CONFIG_SDC_QTI)
+	int err;
+#endif
 
 	if (host->hsq_enabled)
 		return mmc_blk_hsq_issue_rw_rq(mq, req);
 
 	mmc_blk_data_prep(mq, mqrq, 0, NULL, NULL);
+#if defined(CONFIG_SDC_QTI)
+	mmc_deferred_scaling(mq->card->host);
+	mmc_cqe_clk_scaling_start_busy(mq, mq->card->host, true);
 
+	err =  mmc_blk_cqe_start_req(mq->card->host, &mqrq->brq.mrq);
+
+	if (err)
+		mmc_cqe_clk_scaling_stop_busy(mq->card->host, true, false);
+
+	return err;
+#else
 	return mmc_blk_cqe_start_req(mq->card->host, &mqrq->brq.mrq);
+#endif
 }
 
 static void mmc_blk_rw_rq_prep(struct mmc_queue_req *mqrq,
@@ -1905,6 +1939,15 @@ static void mmc_blk_mq_rw_recovery(struct mmc_queue *mq, struct request *req)
 	    err && mmc_blk_reset(md, card->host, type)) {
 		pr_err("%s: recovery failed!\n", req->rq_disk->disk_name);
 		mqrq->retries = MMC_NO_RETRIES;
+
+#if defined(CONFIG_SDC_QTI)
+		/* Completely remove the non-recoverable card */
+		if (mmc_card_sd(card)) {
+			mmc_card_set_removed(card);
+			card->host->corrupted_card = true;
+			mmc_detect_change(card->host, msecs_to_jiffies(200));
+		}
+#endif
 		return;
 	}
 
@@ -1931,7 +1974,8 @@ static void mmc_blk_mq_rw_recovery(struct mmc_queue *mq, struct request *req)
 
 	/* FIXME: Missing single sector read for large sector size */
 	if (!mmc_large_sector(card) && rq_data_dir(req) == READ &&
-	    brq->data.blocks > 1) {
+	    brq->data.blocks > 1 &&
+	    !mmc_card_sd(card)) {	// no retry for SD read data error
 		/* Read one sector at a time */
 		mmc_blk_read_single(mq, req);
 		return;
@@ -2081,13 +2125,18 @@ static void mmc_blk_mq_poll_completion(struct mmc_queue *mq,
 
 static void mmc_blk_mq_dec_in_flight(struct mmc_queue *mq, enum mmc_issue_type issue_type)
 {
+#if defined(CONFIG_SDC_QTI)
+	struct mmc_host *host = mq->card->host;
+#endif
 	unsigned long flags;
 	bool put_card;
 
 	spin_lock_irqsave(&mq->lock, flags);
 
 	mq->in_flight[issue_type] -= 1;
-
+#if defined(CONFIG_SDC_QTI)
+	atomic_dec(&host->active_reqs);
+#endif
 	put_card = (mmc_tot_in_flight(mq) == 0);
 
 	spin_unlock_irqrestore(&mq->lock, flags);
@@ -2476,7 +2525,8 @@ static struct mmc_blk_data *mmc_blk_alloc_req(struct mmc_card *card,
 		if ((mmc_card_mmc(card) &&
 		     card->csd.mmca_vsn >= CSD_SPEC_VER_3) ||
 		    (mmc_card_sd(card) &&
-		     card->scr.cmds & SD_SCR_CMD23_SUPPORT))
+		     card->scr.cmds & SD_SCR_CMD23_SUPPORT &&
+		     mmc_card_uhs(card)))
 			md->flags |= MMC_BLK_CMD23;
 	}
 
@@ -3027,6 +3077,9 @@ static int mmc_blk_probe(struct mmc_card *card)
 	pr_info("%s: %s %s %s %s\n",
 		md->disk->disk_name, mmc_card_id(card), mmc_card_name(card),
 		cap_str, md->read_only ? "(ro)" : "");
+	ST_LOG("%s: %s %s %s %s\n",
+		md->disk->disk_name, mmc_card_id(card), mmc_card_name(card),
+		cap_str, md->read_only ? "(ro)" : "");
 
 	if (mmc_blk_alloc_parts(card, md))
 		goto out;
@@ -3100,7 +3153,16 @@ static int _mmc_blk_suspend(struct mmc_card *card)
 
 static void mmc_blk_shutdown(struct mmc_card *card)
 {
+	struct mmc_blk_data *md = dev_get_drvdata(&card->dev);
+	struct mmc_blk_data *part_md;
+
 	_mmc_blk_suspend(card);
+
+	if (md) {
+		list_for_each_entry(part_md, &md->part, part)
+			mmc_cleanup_queue(&part_md->queue);
+		mmc_cleanup_queue(&md->queue);
+	}
 }
 
 #ifdef CONFIG_PM_SLEEP

@@ -53,6 +53,11 @@
 #include <net/netfilter/nf_nat_helper.h>
 #include <net/netns/hash.h>
 #include <net/ip.h>
+// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA {
+#ifdef CONFIG_KNOX_NCM
+#include <net/ncm.h>
+#endif
+// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA }
 
 #include "nf_internals.h"
 
@@ -65,6 +70,12 @@ EXPORT_SYMBOL_GPL(nf_conntrack_expect_lock);
 struct hlist_nulls_head *nf_conntrack_hash __read_mostly;
 EXPORT_SYMBOL_GPL(nf_conntrack_hash);
 
+bool (*nattype_refresh_timer)
+	(unsigned long nattype,
+	unsigned long timeout_value)
+	__rcu __read_mostly;
+EXPORT_SYMBOL(nattype_refresh_timer);
+
 struct conntrack_gc_work {
 	struct delayed_work	dwork;
 	u32			next_bucket;
@@ -74,6 +85,11 @@ struct conntrack_gc_work {
 
 static __read_mostly struct kmem_cache *nf_conntrack_cachep;
 static DEFINE_SPINLOCK(nf_conntrack_locks_all_lock);
+// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA {
+#ifdef CONFIG_KNOX_NCM
+static DEFINE_SPINLOCK(knox_nf_conntrack);
+#endif
+// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA }
 static __read_mostly bool nf_conntrack_locks_all;
 
 #define GC_SCAN_INTERVAL	(120u * HZ)
@@ -175,7 +191,14 @@ EXPORT_SYMBOL_GPL(nf_conntrack_htable_size);
 unsigned int nf_conntrack_max __read_mostly;
 EXPORT_SYMBOL_GPL(nf_conntrack_max);
 seqcount_t nf_conntrack_generation __read_mostly;
-static unsigned int nf_conntrack_hash_rnd __read_mostly;
+
+#ifdef CONFIG_ENABLE_SFE
+unsigned int nf_conntrack_pkt_threshold __read_mostly;
+EXPORT_SYMBOL(nf_conntrack_pkt_threshold);
+#endif
+
+unsigned int nf_conntrack_hash_rnd __read_mostly;
+EXPORT_SYMBOL(nf_conntrack_hash_rnd);
 
 static u32 hash_conntrack_raw(const struct nf_conntrack_tuple *tuple,
 			      const struct net *net)
@@ -479,7 +502,7 @@ EXPORT_SYMBOL_GPL(nf_ct_get_id);
 static void
 clean_from_lists(struct nf_conn *ct)
 {
-	pr_debug("clean_from_lists(%p)\n", ct);
+	pr_debug("clean_from_lists(%pK)\n", ct);
 	hlist_nulls_del_rcu(&ct->tuplehash[IP_CT_DIR_ORIGINAL].hnnode);
 	hlist_nulls_del_rcu(&ct->tuplehash[IP_CT_DIR_REPLY].hnnode);
 
@@ -491,6 +514,14 @@ clean_from_lists(struct nf_conn *ct)
 static void nf_ct_add_to_dying_list(struct nf_conn *ct)
 {
 	struct ct_pcpu *pcpu;
+
+	// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA {
+#ifdef CONFIG_KNOX_NCM
+	if ( (check_ncm_flag()) && (ct != NULL) && (NF_CONN_NPA_VENDOR_DATA_GET(ct)) && (atomic_read(&NF_CONN_NPA_VENDOR_DATA_GET(ct)->startFlow)) ) {
+		knox_collect_conntrack_data(ct, NCM_FLOW_TYPE_CLOSE, 10);
+	}
+#endif
+	// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA }
 
 	/* add this conntrack to the (per cpu) dying list */
 	ct->cpu = smp_processor_id();
@@ -588,12 +619,38 @@ static void destroy_gre_conntrack(struct nf_conn *ct)
 #endif
 }
 
+#ifdef CONFIG_ENABLE_SFE
+void (*delete_sfe_entry)(struct nf_conn *ct) __rcu __read_mostly;
+EXPORT_SYMBOL(delete_sfe_entry);
+#endif
+
 static void
 destroy_conntrack(struct nf_conntrack *nfct)
 {
 	struct nf_conn *ct = (struct nf_conn *)nfct;
+    
+	// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA {
+#ifdef CONFIG_KNOX_NCM
+	unsigned long flags;
+	spin_lock_irqsave(&knox_nf_conntrack,flags);
+	if (NF_CONN_NPA_VENDOR_DATA_GET(ct)) {
+		kfree(NF_CONN_NPA_VENDOR_DATA_GET(ct));
+		ct->android_vendor_data1 = (u64)NULL;
+	}
+	spin_unlock_irqrestore(&knox_nf_conntrack,flags);
+#endif
+	// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA }
 
-	pr_debug("destroy_conntrack(%p)\n", ct);
+#ifdef CONFIG_ENABLE_SFE
+	void (*delete_entry)(struct nf_conn *ct);
+#endif
+#ifdef CONFIG_NF_CONNTRACK_SIP_SEGMENTATION
+	struct sip_list *sip_node = NULL;
+	struct list_head *sip_node_list;
+	struct list_head *sip_node_save_list;
+#endif
+
+	pr_debug("destroy_conntrack(%pK)\n", ct);
 	WARN_ON(atomic_read(&nfct->use) != 0);
 
 	if (unlikely(nf_ct_is_template(ct))) {
@@ -604,7 +661,28 @@ destroy_conntrack(struct nf_conntrack *nfct)
 	if (unlikely(nf_ct_protonum(ct) == IPPROTO_GRE))
 		destroy_gre_conntrack(ct);
 
+#ifdef CONFIG_ENABLE_SFE
+	if (ct->sfe_entry) {
+		delete_entry = rcu_dereference(delete_sfe_entry);
+		if (delete_entry)
+			delete_entry(ct);
+	}
+#endif
+
 	local_bh_disable();
+
+#ifdef CONFIG_NF_CONNTRACK_SIP_SEGMENTATION
+	pr_debug("freeing item in the SIP list\n");
+
+	if (ct->sip_segment_list.next)
+		list_for_each_safe(sip_node_list, sip_node_save_list,
+				   &ct->sip_segment_list) {
+			sip_node = list_entry(sip_node_list,
+					      struct sip_list, list);
+			list_del(&sip_node->list);
+			kfree(sip_node);
+		}
+#endif
 	/* Expectations will have been removed in clean_from_lists,
 	 * except TFTP can create an expectation on the first packet,
 	 * before connection is in the list, so we need to clean here,
@@ -619,7 +697,7 @@ destroy_conntrack(struct nf_conntrack *nfct)
 	if (ct->master)
 		nf_ct_put(ct->master);
 
-	pr_debug("destroy_conntrack: returning ct=%p to slab\n", ct);
+	pr_debug("destroy_conntrack: returning ct=%pK to slab\n", ct);
 	nf_conntrack_free(ct);
 }
 
@@ -980,7 +1058,7 @@ __nf_conntrack_confirm(struct sk_buff *skb)
 		return NF_DROP;
 	}
 
-	pr_debug("Confirming conntrack %p\n", ct);
+	pr_debug("Confirming conntrack %pK\n", ct);
 	/* We have to check the DYING flag after unlink to prevent
 	 * a race against nf_ct_get_next_corpse() possibly called from
 	 * user context, else we insert an already 'dead' hash, blocking
@@ -1259,6 +1337,16 @@ static void gc_worker(struct work_struct *work)
 			if (nf_ct_is_expired(tmp)) {
 				nf_ct_gc_expired(tmp);
 				continue;
+			// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA {
+#ifdef CONFIG_KNOX_NCM
+			} else if ( (tmp != NULL) && (check_ncm_flag()) && (check_intermediate_flag()) && (NF_CONN_NPA_VENDOR_DATA_GET(tmp)) && (atomic_read(&NF_CONN_NPA_VENDOR_DATA_GET(tmp)->startFlow)) && (atomic_read(&NF_CONN_NPA_VENDOR_DATA_GET(tmp)->intermediateFlow)) ) {
+				s32 npa_timeout = NF_CONN_NPA_VENDOR_DATA_GET(tmp)->npa_timeout - ((u32)(jiffies));
+				if (npa_timeout <= 0) {
+					NF_CONN_NPA_VENDOR_DATA_GET(tmp)->npa_timeout = ((u32)(jiffies)) + (get_intermediate_timeout() * HZ);
+					knox_collect_conntrack_data(tmp, NCM_FLOW_TYPE_INTERMEDIATE, 20);
+				}
+#endif
+			// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA }
 			}
 
 			if (nf_conntrack_max95 == 0 || gc_worker_skip_ct(tmp))
@@ -1329,6 +1417,11 @@ __nf_conntrack_alloc(struct net *net,
 		     gfp_t gfp, u32 hash)
 {
 	struct nf_conn *ct;
+	// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA {
+#ifdef CONFIG_KNOX_NCM
+	struct timespec open_timespec;
+#endif
+	// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA }
 
 	/* We don't want any race condition at early drop stage */
 	atomic_inc(&net->ct.count);
@@ -1353,6 +1446,11 @@ __nf_conntrack_alloc(struct net *net,
 		goto out;
 
 	spin_lock_init(&ct->lock);
+	// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA {
+#ifdef CONFIG_KNOX_NCM
+	ct->android_vendor_data1 = (u64)NULL;
+#endif
+	// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA }
 	ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple = *orig;
 	ct->tuplehash[IP_CT_DIR_ORIGINAL].hnnode.pprev = NULL;
 	ct->tuplehash[IP_CT_DIR_REPLY].tuple = *repl;
@@ -1367,7 +1465,20 @@ __nf_conntrack_alloc(struct net *net,
 
 	nf_ct_zone_add(ct, zone);
 
+#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE)
+	ct->nattype_entry = 0;
+#endif
+
 	trace_android_rvh_nf_conn_alloc(ct);
+	// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA {
+#ifdef CONFIG_KNOX_NCM
+	ct->android_vendor_data1 = (u64)kzalloc(sizeof(struct nf_conn_npa_vendor_data), gfp);
+	ktime_get_ts(&open_timespec);
+	if (NF_CONN_NPA_VENDOR_DATA_GET(ct) != NULL){
+		NF_CONN_NPA_VENDOR_DATA_GET(ct)->open_time = open_timespec.tv_sec;
+	}
+#endif
+	// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA }
 
 	/* Because we use RCU lookups, we set ct_general.use to zero before
 	 * this is inserted in any list.
@@ -1391,6 +1502,11 @@ EXPORT_SYMBOL_GPL(nf_conntrack_alloc);
 
 void nf_conntrack_free(struct nf_conn *ct)
 {
+	// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA {
+#ifdef CONFIG_KNOX_NCM
+	unsigned long flags;
+#endif
+	// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA 
 	struct net *net = nf_ct_net(ct);
 
 	/* A freed object has refcnt == 0, that's
@@ -1402,6 +1518,16 @@ void nf_conntrack_free(struct nf_conn *ct)
 	nf_ct_ext_free(ct);
 	kmem_cache_free(nf_conntrack_cachep, ct);
 	smp_mb__before_atomic();
+	// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA {
+#ifdef CONFIG_KNOX_NCM
+	spin_lock_irqsave(&knox_nf_conntrack,flags);
+	if (NF_CONN_NPA_VENDOR_DATA_GET(ct)) {
+		kfree(NF_CONN_NPA_VENDOR_DATA_GET(ct));
+		ct->android_vendor_data1 = (u64)NULL;
+	}
+	spin_unlock_irqrestore(&knox_nf_conntrack,flags);
+#endif
+	// SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA }
 	trace_android_rvh_nf_conn_free(ct);
 	atomic_dec(&net->ct.count);
 }
@@ -1457,11 +1583,14 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 			     GFP_ATOMIC);
 
 	local_bh_disable();
+#ifdef CONFIG_NF_CONNTRACK_SIP_SEGMENTATION
+	INIT_LIST_HEAD(&ct->sip_segment_list);
+#endif
 	if (net->ct.expect_count) {
 		spin_lock(&nf_conntrack_expect_lock);
 		exp = nf_ct_find_expectation(net, zone, tuple);
 		if (exp) {
-			pr_debug("expectation arrives ct=%p exp=%p\n",
+			pr_debug("expectation arrives ct=%pK exp=%pK\n",
 				 ct, exp);
 			/* Welcome, Mr. Bond.  We've been expecting you... */
 			__set_bit(IPS_EXPECTED_BIT, &ct->status);
@@ -1478,6 +1607,10 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 #endif
 #ifdef CONFIG_NF_CONNTRACK_SECMARK
 			ct->secmark = exp->master->secmark;
+#endif
+/* Initialize the NAT type entry. */
+#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE)
+		ct->nattype_entry = 0;
 #endif
 			NF_CT_STAT_INC(net, expect_new);
 		}
@@ -1544,13 +1677,13 @@ resolve_normal_ct(struct nf_conn *tmpl,
 	} else {
 		/* Once we've had two way comms, always ESTABLISHED. */
 		if (test_bit(IPS_SEEN_REPLY_BIT, &ct->status)) {
-			pr_debug("normal packet for %p\n", ct);
+			pr_debug("normal packet for %pK\n", ct);
 			ctinfo = IP_CT_ESTABLISHED;
 		} else if (test_bit(IPS_EXPECTED_BIT, &ct->status)) {
-			pr_debug("related packet for %p\n", ct);
+			pr_debug("related packet for %pK\n", ct);
 			ctinfo = IP_CT_RELATED;
 		} else {
-			pr_debug("new packet for %p\n", ct);
+			pr_debug("new packet for %pK\n", ct);
 			ctinfo = IP_CT_NEW;
 		}
 	}
@@ -1749,7 +1882,7 @@ void nf_conntrack_alter_reply(struct nf_conn *ct,
 	/* Should be unconfirmed, so not in hash table yet */
 	WARN_ON(nf_ct_is_confirmed(ct));
 
-	pr_debug("Altering reply tuple of %p to ", ct);
+	pr_debug("Altering reply tuple of %pK to ", ct);
 	nf_ct_dump_tuple(newreply);
 
 	ct->tuplehash[IP_CT_DIR_REPLY].tuple = *newreply;
@@ -1769,6 +1902,18 @@ void __nf_ct_refresh_acct(struct nf_conn *ct,
 			  u32 extra_jiffies,
 			  bool do_acct)
 {
+
+#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE)
+	bool (*nattype_ref_timer)
+		(unsigned long nattype,
+		unsigned long timeout_value);
+#endif
+
+#ifdef CONFIG_ENABLE_SFE
+	struct nf_conn_acct *acct;
+	u64 pkts;
+#endif
+
 	/* Only update if this is not a fixed timeout */
 	if (test_bit(IPS_FIXED_TIMEOUT_BIT, &ct->status))
 		goto acct;
@@ -1779,9 +1924,41 @@ void __nf_ct_refresh_acct(struct nf_conn *ct,
 
 	if (READ_ONCE(ct->timeout) != extra_jiffies)
 		WRITE_ONCE(ct->timeout, extra_jiffies);
+
+/* Refresh the NAT type entry. */
+#if defined(CONFIG_IP_NF_TARGET_NATTYPE_MODULE)
+	nattype_ref_timer = rcu_dereference(nattype_refresh_timer);
+	if (nattype_ref_timer)
+		nattype_ref_timer(ct->nattype_entry, ct->timeout);
+#endif
+
 acct:
+#ifdef CONFIG_ENABLE_SFE
+	if (do_acct) {
+		acct = nf_conn_acct_find(ct);
+		if (acct) {
+			struct nf_conn_counter *counter = acct->counter;
+
+			atomic64_inc(&counter[CTINFO2DIR(ctinfo)].packets);
+			atomic64_add(skb->len, &counter
+					[CTINFO2DIR(ctinfo)].bytes);
+
+			pkts =
+			((u64)atomic64_read(&counter[CTINFO2DIR(ctinfo)].packets)) +
+			((u64)atomic64_read(&counter[!CTINFO2DIR(ctinfo)].packets));
+			/* Report if the packet threshold is reached. */
+			if (nf_conntrack_pkt_threshold > 0 &&
+			    pkts == nf_conntrack_pkt_threshold) {
+				nf_conntrack_event_cache(IPCT_COUNTER, ct);
+				nf_conntrack_event_cache(IPCT_PROTOINFO, ct);
+				nf_ct_deliver_cached_events(ct);
+			}
+		}
+	}
+#else
 	if (do_acct)
 		nf_ct_acct_update(ct, ctinfo, skb->len);
+#endif
 }
 EXPORT_SYMBOL_GPL(__nf_ct_refresh_acct);
 

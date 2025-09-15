@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: GPL-2.0
+// SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/edac.h>
@@ -14,9 +14,19 @@
 #include "edac_mc.h"
 #include "edac_device.h"
 
+#if IS_ENABLED(CONFIG_SEC_USER_RESET_DEBUG)
+#include <linux/sec_debug.h>
+#endif
+
 #define EDAC_LLCC                       "qcom_llcc"
 
+#define LLCC_ERP_PANIC_ON_CE            1
+
+#ifdef CONFIG_EDAC_QCOM_LLCC_PANIC_ON_UE
 #define LLCC_ERP_PANIC_ON_UE            1
+#else
+#define LLCC_ERP_PANIC_ON_UE            0
+#endif
 
 #define TRP_SYN_REG_CNT                 6
 #define DRP_SYN_REG_CNT                 8
@@ -26,7 +36,7 @@
 #define LLCC_LB_CNT_SHIFT               28
 
 /* Single & double bit syndrome register offsets */
-#define TRP_ECC_SB_ERR_SYN0             0x0002304c
+#define TRP_ECC_SB_ERR_SYN0             0x0002034c
 #define TRP_ECC_DB_ERR_SYN0             0x00020370
 #define DRP_ECC_SB_ERR_SYN0             0x0004204c
 #define DRP_ECC_DB_ERR_SYN0             0x00042070
@@ -75,6 +85,9 @@
 #define TRP0_INTERRUPT_ENABLE           0x1
 #define DRP0_INTERRUPT_ENABLE           BIT(6)
 #define SB_DB_DRP_INTERRUPT_ENABLE      0x3
+
+static int poll_msec = 5000;
+module_param(poll_msec, int, 0444);
 
 enum {
 	LLCC_DRAM_CE = 0,
@@ -249,6 +262,58 @@ clear:
 	return qcom_llcc_clear_error_status(err_type, drv);
 }
 
+#if IS_ENABLED(CONFIG_SEC_USER_RESET_DEBUG)
+static ap_health_t *p_health;
+static ap_health_t tmp_health;
+
+static int update_llcc_edac_count(int etype)
+{
+	if (p_health) {
+		switch (etype) {
+			case LLCC_DRAM_CE:
+				p_health->cache.edac_llcc_data_ram.ce_cnt++;
+				p_health->daily_cache.edac_llcc_data_ram.ce_cnt++;
+				break;
+			case LLCC_DRAM_UE:
+				p_health->cache.edac_llcc_data_ram.ue_cnt++;
+				p_health->daily_cache.edac_llcc_data_ram.ue_cnt++;
+				break;
+			case LLCC_TRAM_CE:
+				p_health->cache.edac_llcc_tag_ram.ce_cnt++;
+				p_health->daily_cache.edac_llcc_tag_ram.ce_cnt++;
+				break;
+			case LLCC_TRAM_UE:
+				p_health->cache.edac_llcc_tag_ram.ue_cnt++;
+				p_health->daily_cache.edac_llcc_tag_ram.ue_cnt++;
+				break;
+		}
+		ap_health_data_write(p_health);
+	} else {
+		tmp_health.header.magic = AP_HEALTH_MAGIC;
+		switch (etype) {
+			case LLCC_DRAM_CE:
+				tmp_health.cache.edac_llcc_data_ram.ce_cnt++;
+				tmp_health.daily_cache.edac_llcc_data_ram.ce_cnt++;
+				break;
+			case LLCC_DRAM_UE:
+				tmp_health.cache.edac_llcc_data_ram.ue_cnt++;
+				tmp_health.daily_cache.edac_llcc_data_ram.ue_cnt++;
+				break;
+			case LLCC_TRAM_CE:
+				tmp_health.cache.edac_llcc_tag_ram.ce_cnt++;
+				tmp_health.daily_cache.edac_llcc_tag_ram.ce_cnt++;
+				break;
+			case LLCC_TRAM_UE:
+				tmp_health.cache.edac_llcc_tag_ram.ue_cnt++;
+				tmp_health.daily_cache.edac_llcc_tag_ram.ue_cnt++;
+				break;
+		}
+	}
+
+	return 0;
+}
+#endif
+
 static int
 dump_syn_reg(struct edac_device_ctl_info *edev_ctl, int err_type, u32 bank)
 {
@@ -259,6 +324,9 @@ dump_syn_reg(struct edac_device_ctl_info *edev_ctl, int err_type, u32 bank)
 	if (ret)
 		return ret;
 
+#if IS_ENABLED(CONFIG_SEC_USER_RESET_DEBUG)
+	update_llcc_edac_count(err_type);
+#endif
 	switch (err_type) {
 	case LLCC_DRAM_CE:
 		edac_device_handle_ce(edev_ctl, 0, bank,
@@ -292,6 +360,7 @@ llcc_ecc_irq_handler(int irq, void *edev_ctl)
 	struct llcc_drv_data *drv = edac_dev_ctl->dev->platform_data;
 	irqreturn_t irq_rc = IRQ_NONE;
 	u32 drp_error, trp_error, i;
+	bool irq_handled = false;
 	int ret;
 
 	/* Iterate over the banks and look for Tag RAM or Data RAM errors */
@@ -310,7 +379,7 @@ llcc_ecc_irq_handler(int irq, void *edev_ctl)
 			ret = dump_syn_reg(edev_ctl, LLCC_DRAM_UE, i);
 		}
 		if (!ret)
-			irq_rc = IRQ_HANDLED;
+			irq_handled = true;
 
 		ret = regmap_read(drv->regmap,
 				  drv->offsets[i] + TRP_INTERRUPT_0_STATUS,
@@ -326,11 +395,63 @@ llcc_ecc_irq_handler(int irq, void *edev_ctl)
 			ret = dump_syn_reg(edev_ctl, LLCC_TRAM_UE, i);
 		}
 		if (!ret)
-			irq_rc = IRQ_HANDLED;
+			irq_handled = true;
 	}
+
+	if (irq_handled)
+		irq_rc = IRQ_HANDLED;
 
 	return irq_rc;
 }
+
+static void qcom_llcc_poll_cache_errors(struct edac_device_ctl_info *edev_ctl)
+{
+	llcc_ecc_irq_handler(0, edev_ctl);
+}
+
+#if IS_ENABLED(CONFIG_SEC_USER_RESET_DEBUG)                                  
+static int llcc_edac_dbg_part_notifier_callback(
+		struct notifier_block *nb, unsigned long action, void *data)
+{       
+	switch (action) {
+		case DBG_PART_DRV_INIT_DONE:
+			p_health = ap_health_data_read();
+			if (tmp_health.header.magic == AP_HEALTH_MAGIC) {
+				p_health->cache.edac_llcc_data_ram.ce_cnt +=
+					tmp_health.cache.edac_llcc_data_ram.ce_cnt;
+				p_health->daily_cache.edac_llcc_data_ram.ce_cnt +=
+					tmp_health.daily_cache.edac_llcc_data_ram.ce_cnt;
+				p_health->cache.edac_llcc_data_ram.ue_cnt +=
+					tmp_health.cache.edac_llcc_data_ram.ue_cnt;
+				p_health->daily_cache.edac_llcc_data_ram.ue_cnt +=
+					tmp_health.daily_cache.edac_llcc_data_ram.ue_cnt;
+				p_health->cache.edac_llcc_tag_ram.ce_cnt +=
+					tmp_health.cache.edac_llcc_tag_ram.ce_cnt;
+				p_health->daily_cache.edac_llcc_tag_ram.ce_cnt +=
+					tmp_health.daily_cache.edac_llcc_tag_ram.ce_cnt;
+				p_health->cache.edac_llcc_tag_ram.ue_cnt +=
+					tmp_health.cache.edac_llcc_tag_ram.ue_cnt;
+				p_health->daily_cache.edac_llcc_tag_ram.ue_cnt +=
+					tmp_health.daily_cache.edac_llcc_tag_ram.ue_cnt;
+
+				ap_health_data_write(p_health);
+
+				pr_info("ap_health llcc edac updated\n");
+				memset((void *)&tmp_health, 0, sizeof(ap_health_t));
+			}
+
+			break;
+		default:
+			return NOTIFY_DONE;
+	}
+
+	return NOTIFY_OK;
+}       
+
+static struct notifier_block llcc_edac_dbg_part_notifier = {
+	.notifier_call = llcc_edac_dbg_part_notifier_callback,
+};
+#endif  
 
 static int qcom_llcc_edac_probe(struct platform_device *pdev)
 {
@@ -339,10 +460,6 @@ static int qcom_llcc_edac_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	int ecc_irq;
 	int rc;
-
-	rc = qcom_llcc_core_setup(llcc_driv_data->bcast_regmap);
-	if (rc)
-		return rc;
 
 	/* Allocate edac control info */
 	edev_ctl = edac_device_alloc_ctl_info(0, "qcom-llcc", 1, "bank",
@@ -358,31 +475,49 @@ static int qcom_llcc_edac_probe(struct platform_device *pdev)
 	edev_ctl->dev_name = dev_name(dev);
 	edev_ctl->ctl_name = "llcc";
 	edev_ctl->panic_on_ue = LLCC_ERP_PANIC_ON_UE;
+#ifdef CONFIG_EDAC_QCOM_LLCC_PANIC_ON_CE
+	edev_ctl->panic_on_ce = LLCC_ERP_PANIC_ON_CE;
+#endif
+	edev_ctl->pvt_info = llcc_driv_data;
+
+	/* Request for ecc irq */
+	ecc_irq = llcc_driv_data->ecc_irq;
+	if (ecc_irq < 0) {
+		dev_info(dev, "No ECC IRQ; defaulting to polling mode\n");
+		edev_ctl->poll_msec = poll_msec;
+		edev_ctl->edac_check = qcom_llcc_poll_cache_errors;
+#ifdef CONFIG_EDAC_QGKI
+		edev_ctl->defer_work = 1;
+#endif
+	}
 
 	rc = edac_device_add_device(edev_ctl);
 	if (rc)
 		goto out_mem;
 
-	platform_set_drvdata(pdev, edev_ctl);
+	if (ecc_irq >= 0) {
+		rc = qcom_llcc_core_setup(llcc_driv_data->bcast_regmap);
+		if (rc)
+			goto out_dev;
 
-	/* Request for ecc irq */
-	ecc_irq = llcc_driv_data->ecc_irq;
-	if (ecc_irq < 0) {
-		rc = -ENODEV;
-		goto out_dev;
+		rc = devm_request_irq(dev, ecc_irq, llcc_ecc_irq_handler,
+			      IRQF_SHARED | IRQF_ONESHOT | IRQF_TRIGGER_HIGH,
+			      "llcc_ecc", edev_ctl);
+		if (rc)
+			goto out_dev;
 	}
-	rc = devm_request_irq(dev, ecc_irq, llcc_ecc_irq_handler,
-			      IRQF_TRIGGER_HIGH, "llcc_ecc", edev_ctl);
-	if (rc)
-		goto out_dev;
 
+	platform_set_drvdata(pdev, edev_ctl);
+#if IS_ENABLED(CONFIG_SEC_USER_RESET_DEBUG)
+	memset((void *)&tmp_health, 0, sizeof(ap_health_t));
+	dbg_partition_notifier_register(&llcc_edac_dbg_part_notifier);
+#endif
 	return rc;
 
 out_dev:
 	edac_device_del_device(edev_ctl->dev);
 out_mem:
 	edac_device_free_ctl_info(edev_ctl);
-
 	return rc;
 }
 
