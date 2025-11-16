@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/err.h>
 #include <linux/module.h>
+#include <linux/nvmem-consumer.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm.h>
@@ -16,6 +18,17 @@
 #include "thermal_core.h"
 
 LIST_HEAD(tsens_device_list);
+
+#if defined(CONFIG_SEC_PM)
+static struct delayed_work ts_print_work;
+struct tsens_device *ts_tmdev0 = NULL;
+struct tsens_device *ts_tmdev1 = NULL;
+
+/* TODO: optimize the # of tsens pring, now for bring up  debugging */
+static int ts_print_num0[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
+static int ts_print_num1[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};
+static int ts_print_count;
+#endif
 
 static int tsens_get_temp(void *data, int *temp)
 {
@@ -205,9 +218,94 @@ static int get_device_tree_data(struct platform_device *pdev,
 	return rc;
 }
 
+static void tsens_thermal_zone_trip_update(struct tsens_device *tmdev,
+					struct thermal_zone_device *tz,
+					const struct thermal_trip *trip, int trip_id)
+{
+	int ret = 0;
+	u32 trip_delta = 0;
+	int trip_temp;
+
+	if (trip->type == THERMAL_TRIP_CRITICAL)
+		return;
+
+	if (strnstr(tz->type, "cpu", sizeof(tz->type)))
+		trip_delta = TSENS_ELEVATE_CPU_DELTA;
+	else
+		trip_delta = TSENS_ELEVATE_DELTA;
+
+	trip_temp = trip->temperature + trip_delta;
+	if (tz->ops->set_trip_temp) {
+		ret = tz->ops->set_trip_temp(tz, trip_id, trip_temp);
+		if (ret) {
+			dev_err(tmdev->dev, "%s: failed to set trip%d for %s\n",
+				__func__, trip_id, tz->type);
+			return;
+		}
+	}
+	thermal_zone_device_update(tz, THERMAL_TRIP_CHANGED);
+}
+
+static int tsens_nvmem_trip_update(struct tsens_device *tmdev,
+				struct thermal_zone_device *tz)
+{
+	int i, num_trips = 0;
+	const struct thermal_trip *trips = NULL;
+
+	if (strnstr(tz->type, "mdmss", sizeof(tz->type)) ||
+		!strnstr(tz->governor->name, "step_wise",
+				sizeof(tz->governor->name)))
+		return 0;
+
+	if (!tz->ops->set_trip_temp) {
+		dev_err(tmdev->dev, "%s: No set_trip_temp ops support for %s\n",
+			__func__, tz->type);
+		return -EINVAL;
+	}
+
+	num_trips = of_thermal_get_ntrips(tz);
+	trips = of_thermal_get_trip_points(tz);
+	for (i = 0; i < num_trips; i++)
+		tsens_thermal_zone_trip_update(tmdev, tz, &trips[i], i);
+
+	return 0;
+}
+
+static bool tsens_is_nvmem_trip_update_needed(struct tsens_device *tmdev)
+{
+	int ret;
+	u32 chipinfo, tsens_jtag;
+	u8 tsens_feat_id;
+
+	if (!of_property_read_bool(tmdev->dev->of_node, "nvmem-cells"))
+		return false;
+
+	ret = nvmem_cell_read_u32(tmdev->dev, "tsens_chipinfo", &chipinfo);
+	if (ret) {
+		dev_err(tmdev->dev,
+			"%s: Not able to read tsens_chipinfo nvmem, ret:%d\n",
+			__func__, ret);
+		return false;
+	}
+
+	tsens_jtag = chipinfo & GENMASK(19, 0);
+	tsens_feat_id = (chipinfo >> TSENS_FEAT_OFFSET) & GENMASK(7, 0);
+	dev_dbg(tmdev->dev, "chipinfo:0x%x tsens_jtag: 0x%x tsens_feat_id:0x%x",
+		chipinfo, tsens_jtag, tsens_feat_id);
+	if ((tsens_jtag == TSENS_CHIP_ID0 && tsens_feat_id == TSENS_FEAT_ID3) ||
+	    (tsens_jtag == TSENS_CHIP_ID1 && tsens_feat_id == TSENS_FEAT_ID4) ||
+	    (tsens_jtag == TSENS_CHIP_ID2 && tsens_feat_id == TSENS_FEAT_ID3) ||
+	    (tsens_jtag == TSENS_CHIP_ID3 && tsens_feat_id == TSENS_FEAT_ID2))
+		return true;
+
+	return false;
+}
+
 static int tsens_thermal_zone_register(struct tsens_device *tmdev)
 {
 	int i = 0, sensor_missing = 0;
+
+	tmdev->need_trip_update = tsens_is_nvmem_trip_update_needed(tmdev);
 
 	for (i = 0; i < TSENS_MAX_SENSORS; i++) {
 		tmdev->sensor[i].tmdev = tmdev;
@@ -222,6 +320,9 @@ static int tsens_thermal_zone_register(struct tsens_device *tmdev)
 				sensor_missing++;
 				continue;
 			}
+			if (tmdev->need_trip_update)
+				tsens_nvmem_trip_update(tmdev,
+						tmdev->sensor[i].tzd);
 		} else {
 			pr_debug("Sensor not enabled:%d\n", i);
 		}
@@ -250,6 +351,10 @@ static int tsens_thermal_zone_register(struct tsens_device *tmdev)
 static int tsens_tm_remove(struct platform_device *pdev)
 {
 	platform_set_drvdata(pdev, NULL);
+
+#if defined(CONFIG_SEC_PM)
+	cancel_delayed_work_sync(&ts_print_work);
+#endif
 
 	return 0;
 }
@@ -285,6 +390,44 @@ static void tsens_therm_fwk_notify(struct work_struct *work)
 		of_thermal_handle_trip(tmdev->dev, tmdev->zeroc.tzd);
 	}
 }
+
+#if defined(CONFIG_SEC_PM)
+static void __ref ts_print(struct work_struct *work)
+{
+	struct tsens_sensor ts_sensor;
+	int temp = 0;
+	size_t i;
+	int added = 0, ret = 0;
+	char buffer[500] = { 0, };
+
+	ret = snprintf(buffer + added, sizeof(buffer) - added, "tsens");
+	added += ret;
+
+	/* print tsens0 (controller 0) */
+	ts_sensor.tmdev = ts_tmdev0;
+	for (i = 0; i < (sizeof(ts_print_num0) / sizeof(int)); i++) {
+		ts_sensor = ts_tmdev0->sensor[ts_print_num0[i]];
+		tsens_get_temp(&ts_sensor, &temp);
+		ret = snprintf(buffer + added, sizeof(buffer) - added,
+				   "[%d:%d]", ts_print_num0[i], temp/100);
+		added += ret;
+	}
+
+	/* print tsens0 (controller 1) */
+	ts_sensor.tmdev = ts_tmdev1;
+	for (i = 0; i < (sizeof(ts_print_num1) / sizeof(int)); i++) {
+		ts_sensor = ts_tmdev1->sensor[ts_print_num1[i]];
+		tsens_get_temp(&ts_sensor, &temp);
+		ret = snprintf(buffer + added, sizeof(buffer) - added,
+					   "[%d:%d]", ts_print_num1[i] + 15, temp/100);
+		added += ret;
+	}
+
+	pr_info("%s\n", buffer);
+
+	schedule_delayed_work(&ts_print_work, HZ * 5);
+}
+#endif
 
 static int tsens_tm_probe(struct platform_device *pdev)
 {
@@ -366,6 +509,20 @@ static int tsens_tm_probe(struct platform_device *pdev)
 
 	list_add_tail(&tmdev->list, &tsens_device_list);
 	platform_set_drvdata(pdev, tmdev);
+
+#if defined(CONFIG_SEC_PM)
+	if (!strncmp(tmdev->pdev->name, "c222000", 7)) {
+		ts_tmdev0 = tmdev;
+	} else if (!strncmp(tmdev->pdev->name, "c223000", 7)) {
+		ts_tmdev1 = tmdev;
+	}
+
+	if (ts_print_count == 0 && ts_tmdev1 != NULL) {
+		INIT_DELAYED_WORK(&ts_print_work, ts_print);
+		schedule_delayed_work(&ts_print_work, 0);
+		ts_print_count++;
+	}
+#endif
 
 	return rc;
 }
