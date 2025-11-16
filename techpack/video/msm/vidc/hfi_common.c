@@ -724,6 +724,8 @@ static int __smem_alloc(struct venus_hfi_device *dev,
 	}
 
 	d_vpr_h("start to alloc size: %d, flags: %d\n", size, flags);
+	alloc->delayed_unmap = true;
+
 	rc = msm_smem_alloc(
 		size, align, flags, usage, 1, (void *)dev->res,
 		MSM_VIDC_UNKNOWN, alloc, DEFAULT_SID);

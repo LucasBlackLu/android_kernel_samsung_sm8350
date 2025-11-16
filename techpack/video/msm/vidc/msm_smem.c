@@ -11,7 +11,7 @@
 
 static int msm_dma_get_device_address(struct dma_buf *dbuf, unsigned long align,
 	dma_addr_t *iova, unsigned long *buffer_size,
-	unsigned long flags, enum hal_buffer buffer_type,
+	unsigned long flags, bool delayed_unmap, enum hal_buffer buffer_type,
 	unsigned long session_type, struct msm_vidc_platform_resources *res,
 	struct dma_mapping_info *mapping_info, u32 sid)
 {
@@ -60,7 +60,10 @@ static int msm_dma_get_device_address(struct dma_buf *dbuf, unsigned long align,
 		 * Get the scatterlist for the given attachment
 		 * Mapping of sg is taken care by map attachment
 		 */
-		attach->dma_map_attrs = DMA_ATTR_DELAYED_UNMAP;
+                if (delayed_unmap) {
+			s_vpr_h(sid, "Delayed unmap is set \n");
+			attach->dma_map_attrs = DMA_ATTR_DELAYED_UNMAP;
+		}
 		/*
 		 * We do not need dma_map function to perform cache operations
 		 * on the whole buffer size and hence pass skip sync flag.
@@ -224,6 +227,9 @@ int msm_smem_map_dma_buf(struct msm_vidc_inst *inst, struct msm_smem *smem)
 	if (ion_flags & ION_FLAG_SECURE)
 		smem->flags |= SMEM_SECURE;
 
+	if (inst->need_delay_unmap)
+		smem->delayed_unmap = true;
+
 	if ((smem->buffer_type & b_type) &&
 		!!(smem->flags & SMEM_SECURE) ^ !!(inst->flags & VIDC_SECURE)) {
 		s_vpr_e(inst->sid, "Failed to map %s buffer with %s session\n",
@@ -235,9 +241,9 @@ int msm_smem_map_dma_buf(struct msm_vidc_inst *inst, struct msm_smem *smem)
 	buffer_size = smem->size;
 
 	rc = msm_dma_get_device_address(dbuf, align, &iova, &buffer_size,
-			smem->flags, smem->buffer_type,	inst->session_type,
-			&(inst->core->resources), &smem->mapping_info,
-			inst->sid);
+			smem->flags, smem->delayed_unmap, smem->buffer_type,
+			inst->session_type, &(inst->core->resources),
+			&smem->mapping_info, inst->sid);
 	if (rc) {
 		s_vpr_e(inst->sid, "Failed to get device address: %d\n", rc);
 		goto fail_map_dma_buf;
@@ -415,7 +421,7 @@ static int alloc_dma_mem(size_t size, u32 align, u32 flags,
 	mem->kvaddr = NULL;
 
 	rc = msm_dma_get_device_address(dbuf, align, &iova,
-			&buffer_size, flags, buffer_type,
+			&buffer_size, flags, mem->delayed_unmap, buffer_type,
 			session_type, res, &mem->mapping_info, sid);
 	if (rc) {
 		s_vpr_e(sid, "Failed to get device address: %d\n",

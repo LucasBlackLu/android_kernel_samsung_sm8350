@@ -6087,9 +6087,10 @@ int msm_vidc_check_session_supported(struct msm_vidc_inst *inst)
 	struct msm_vidc_core *core;
 	u32 output_height, output_width, input_height, input_width;
 	u32 width_min, width_max, height_min, height_max;
-	u32 mbpf_max;
+	u32 mbpf_max, heic_instance_count = 0;
 	struct v4l2_format *f;
 	u32 sid;
+	struct msm_vidc_inst *heic_inst = NULL;
 
 	if (!inst || !inst->core || !inst->core->device) {
 		d_vpr_e("%s: Invalid parameter\n", __func__);
@@ -6144,6 +6145,23 @@ int msm_vidc_check_session_supported(struct msm_vidc_inst *inst)
 	f = &inst->fmts[INPUT_PORT].v4l2_fmt;
 	input_height = f->fmt.pix_mp.height;
 	input_width = f->fmt.pix_mp.width;
+
+	s_vpr_e(sid, "%s: heic_inst %pK\n", __func__, heic_inst);
+	mutex_lock(&core->lock);
+	list_for_each_entry(heic_inst, &core->instances, list) {
+		s_vpr_e(sid, "%s: list heic_inst %pK\n", __func__, heic_inst);
+		if (is_image_session(heic_inst)) {
+			heic_instance_count++;
+			s_vpr_e(sid, "%s: heic_instance_count: %d\n", __func__, heic_instance_count);
+		}
+	}
+	mutex_unlock(&core->lock);
+
+	if ((input_height >= 16384 && input_width >= 16384) &&
+			(heic_instance_count >= 4)) {
+		s_vpr_e(sid, "%s: heic_instance_count: %d, return ENOMEM\n", __func__, heic_instance_count);
+		return -ENOMEM;
+	}
 
 	if (is_image_session(inst)) {
 		if (is_secure_session(inst)) {
@@ -6328,7 +6346,14 @@ int msm_comm_kill_session(struct msm_vidc_inst *inst)
 		inst);
 	return rc;
 }
+bool is_delayed_unmap(struct msm_vidc_inst *inst)
+{
+	u32 mbpf = msm_vidc_get_mbs_per_frame(inst);
 
+	return !(is_decode_session(inst) &&
+		!(inst->flags & VIDC_SECURE) &&
+		(mbpf >= NUM_MBS_PER_FRAME(7680, 3840)));
+}
 int msm_comm_smem_alloc(struct msm_vidc_inst *inst,
 		size_t size, u32 align, u32 flags, enum hal_buffer buffer_type,
 		int map_kernel, struct msm_smem *smem)
@@ -6339,6 +6364,9 @@ int msm_comm_smem_alloc(struct msm_vidc_inst *inst,
 		d_vpr_e("%s: invalid inst: %pK\n", __func__, inst);
 		return -EINVAL;
 	}
+        smem->delayed_unmap = is_delayed_unmap(inst);
+	inst->need_delay_unmap = is_delayed_unmap(inst);
+
 	rc = msm_smem_alloc(size, align, flags, buffer_type, map_kernel,
 				&(inst->core->resources), inst->session_type,
 				smem, inst->sid);

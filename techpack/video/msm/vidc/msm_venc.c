@@ -1819,8 +1819,7 @@ int msm_venc_s_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		if ((inst->level & 0xf0000000) && get_v4l2_codec(inst) == V4L2_PIX_FMT_HEVC) {
 			hevc_tier_value = (inst->level & 0xf0000000);
 			inst->level = msm_comm_v4l2_to_hfi(ctrl->id, ctrl->val, sid) | hevc_tier_value;
-		}
-		else {
+		} else {
 			inst->level = msm_comm_v4l2_to_hfi(ctrl->id, ctrl->val, sid);
 		}
 		break;
@@ -3983,6 +3982,17 @@ int msm_venc_set_video_signal_info(struct msm_vidc_inst *inst)
 			signal_info.transfer_characteristics = ctrl_tr->val;
 			signal_info.matrix_coeffs = ctrl_mc->val;
 		}
+	}
+	else {
+		/* Temporally code for default setting to BT.601 */
+		d_vpr_e("%s: There is no signal info video, so set default color (BT.601 LR)\n", __func__);
+		signal_info.enable = true;
+		signal_info.video_format = MSM_VIDC_NTSC;
+		signal_info.color_description = 1;
+		signal_info.color_primaries = 5;
+		signal_info.video_full_range = 0;		
+		signal_info.transfer_characteristics = 6;
+		signal_info.matrix_coeffs = 6;		
 	}
 
 	s_vpr_h(inst->sid, "%s: %d %d %d %d\n", __func__,

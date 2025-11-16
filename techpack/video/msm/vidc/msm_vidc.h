@@ -65,6 +65,7 @@ struct dma_mapping_info {
 struct msm_smem {
 	u32 refcount;
 	int fd;
+	bool delayed_unmap;
 	void *dma_buf;
 	void *kvaddr;
 	u32 device_addr;
