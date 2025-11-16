@@ -2161,4 +2161,7 @@ int voc_get_source_tracking(struct source_tracking_param *sourceTrackingData);
 int voc_get_fnn_source_tracking(struct fluence_nn_source_tracking_param *FnnSourceTrackingData);
 int voc_set_afe_sidetone(uint32_t session_id, bool sidetone_enable);
 bool voc_get_afe_sidetone(void);
+#ifdef CONFIG_SEC_SND_ADAPTATION
+struct common_data *voice_get_common_data(void);
+#endif /* CONFIG_SEC_SND_ADAPTATION */
 #endif

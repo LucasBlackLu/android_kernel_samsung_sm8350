@@ -254,6 +254,11 @@ ifdef CONFIG_QTI_PP
 	PLATFORM_OBJS += msm-qti-pp-config.o
 endif
 
+ifdef CONFIG_SEC_SND_ADAPTATION
+	PLATFORM_OBJS += sec_audio_adaptation.o
+	PLATFORM_OBJS += sec_voice_adaptation.o
+endif
+
 LINUX_INC +=	-Iinclude/linux
 
 INCS +=		$(COMMON_INC) \
@@ -340,3 +345,6 @@ cpe_lsm_dlkm-y := $(CPE_LSM_OBJS)
 
 obj-$(CONFIG_SND_SOC_GVM_AUTO_SPF) += gvm_spf_machine_dlkm.o
 gvm_spf_machine_dlkm-y := $(SPF_MACHINE_OBJS)
+
+# inject some build related information
+DEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"
