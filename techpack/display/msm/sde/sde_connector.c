@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -16,15 +16,17 @@
 #include <linux/string.h>
 #include "dsi_drm.h"
 #include "dsi_display.h"
-#include "dp_panel.h"
 #include "sde_crtc.h"
 #include "sde_rm.h"
 #include "sde_vm.h"
 #include <drm/drm_probe_helper.h>
 
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+#include "ss_dsi_panel_common.h"
+#endif
+
 #define BL_NODE_NAME_SIZE 32
 #define HDR10_PLUS_VSIF_TYPE_CODE      0x81
-#define MAX_BRIGHTNESS_LEVEL 255
 
 /* Autorefresh will occur after FRAME_CNT frames. Large values are unlikely */
 #define AUTOREFRESH_MAX_FRAME_CNT 6
@@ -95,16 +97,13 @@ static inline struct sde_kms *_sde_connector_get_kms(struct drm_connector *conn)
 static int sde_backlight_device_update_status(struct backlight_device *bd)
 {
 	int brightness;
-	struct dsi_display *dsi_display;
-	struct dp_panel *dp_panel;
+	struct dsi_display *display;
 	struct sde_connector *c_conn = bl_get_data(bd);
 	int bl_lvl;
 	struct drm_event event;
 	int rc = 0;
 	struct sde_kms *sde_kms;
 	struct sde_vm_ops *vm_ops;
-	u32 bl_max_level = 0;
-	u32 brightness_max_level = 0;
 
 	sde_kms = _sde_connector_get_kms(&c_conn->base);
 	if (!sde_kms) {
@@ -119,27 +118,15 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 			(bd->props.state & BL_CORE_SUSPENDED))
 		brightness = 0;
 
-	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
-		dsi_display = (struct dsi_display *) c_conn->display;
-		bl_max_level = dsi_display->panel->bl_config.bl_max_level;
-		brightness_max_level =
-			dsi_display->panel->bl_config.brightness_max_level;
-	} else if (c_conn->connector_type == DRM_MODE_CONNECTOR_eDP) {
-		dp_panel = (struct dp_panel *) c_conn->drv_panel;
-		if (dp_panel) {
-			bl_max_level = dp_panel->bl_config.bl_max_level;
-			brightness_max_level =
-				dp_panel->bl_config.brightness_max_level;
-		}
-	}
-
-	if (brightness > bl_max_level)
-		brightness = bl_max_level;
+	display = (struct dsi_display *) c_conn->display;
+	if (brightness > display->panel->bl_config.bl_max_level)
+		brightness = display->panel->bl_config.bl_max_level;
 	if (brightness > c_conn->thermal_max_brightness)
 		brightness = c_conn->thermal_max_brightness;
 
 	/* map UI brightness into driver backlight level with rounding */
-	bl_lvl = mult_frac(brightness, bl_max_level, brightness_max_level);
+	bl_lvl = mult_frac(brightness, display->panel->bl_config.bl_max_level,
+			display->panel->bl_config.brightness_max_level);
 
 	if (!bl_lvl && brightness)
 		bl_lvl = 1;
@@ -192,6 +179,11 @@ static int sde_backlight_cooling_cb(struct notifier_block *nb,
 	struct sde_connector *c_conn;
 	struct backlight_device *bd = (struct backlight_device *)data;
 
+// Do not control brightness from termal sensor
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+	SDE_ERROR("bl: thermal max brightness cap:%lu : Do not support\n", val);
+	return 0;
+#endif
 	c_conn = bl_get_data(bd);
 	SDE_DEBUG("bl: thermal max brightness cap:%lu\n", val);
 	c_conn->thermal_max_brightness = val;
@@ -205,46 +197,35 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 {
 	struct backlight_properties props;
 	struct dsi_display *display;
-	struct dp_panel *dp_panel;
-	struct dsi_backlight_config *dsi_bl_config;
+	struct dsi_backlight_config *bl_config;
 	struct sde_kms *sde_kms;
 	static int display_count;
 	char bl_node_name[BL_NODE_NAME_SIZE];
-	u32 brightness_max_level = 0;
 
 	sde_kms = _sde_connector_get_kms(&c_conn->base);
 	if (!sde_kms) {
 		SDE_ERROR("invalid kms\n");
 		return -EINVAL;
-	}
-
-	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
-		display = (struct dsi_display *) c_conn->display;
-		dsi_bl_config = &display->panel->bl_config;
-		brightness_max_level = dsi_bl_config->brightness_max_level;
-		if (dsi_bl_config->type != DSI_BACKLIGHT_DCS &&
-			sde_in_trusted_vm(sde_kms))
-			return 0;
-	} else if (c_conn->connector_type == DRM_MODE_CONNECTOR_eDP) {
-		dp_panel = (struct dp_panel *) c_conn->drv_panel;
-		if (dp_panel)
-			brightness_max_level =
-				dp_panel->bl_config.brightness_max_level;
-		else {
-			brightness_max_level = MAX_BRIGHTNESS_LEVEL;
-		}
-	} else {
-		SDE_DEBUG("invalid connector type %d\n",
-				c_conn->connector_type);
+	} else if (c_conn->connector_type != DRM_MODE_CONNECTOR_DSI) {
 		return 0;
 	}
 
+	display = (struct dsi_display *) c_conn->display;
+	bl_config = &display->panel->bl_config;
+
+	if (bl_config->type != DSI_BACKLIGHT_DCS &&
+		sde_in_trusted_vm(sde_kms))
+		return 0;
 
 	memset(&props, 0, sizeof(props));
 	props.type = BACKLIGHT_RAW;
 	props.power = FB_BLANK_UNBLANK;
-	props.max_brightness = brightness_max_level;
-	props.brightness = brightness_max_level;
+	props.max_brightness = bl_config->brightness_max_level;
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+	props.brightness = bl_config->bl_level;
+#else
+	props.brightness = bl_config->brightness_max_level;
+#endif
 	snprintf(bl_node_name, BL_NODE_NAME_SIZE, "panel%u-backlight",
 							display_count);
 	c_conn->bl_device = backlight_device_register(bl_node_name, dev->dev,
@@ -255,7 +236,7 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 		c_conn->bl_device = NULL;
 		return -ENODEV;
 	}
-	c_conn->thermal_max_brightness = brightness_max_level;
+	c_conn->thermal_max_brightness = bl_config->brightness_max_level;
 
 	/**
 	 * In TVM, thermal cooling device is not enabled. Registering with dummy
@@ -601,9 +582,11 @@ void sde_connector_schedule_status_work(struct drm_connector *connector,
 			interval = c_conn->esd_status_interval ?
 				c_conn->esd_status_interval :
 					STATUS_CHECK_INTERVAL_MS;
+#if !defined(CONFIG_DISPLAY_SAMSUNG)
 			/* Schedule ESD status check */
 			schedule_delayed_work(&c_conn->status_work,
 				msecs_to_jiffies(interval));
+#endif
 			c_conn->esd_status_check = true;
 		} else {
 			/* Cancel any pending ESD status check */
@@ -648,7 +631,13 @@ static int _sde_connector_update_power_locked(struct sde_connector *c_conn)
 	SDE_DEBUG("conn %d - dpms %d, lp %d, panel %d\n", connector->base.id,
 			c_conn->dpms_mode, c_conn->lp_mode, mode);
 
+#if !defined(CONFIG_DISPLAY_SAMSUNG) /* QC Original */
 	if (mode != c_conn->last_panel_power_mode && c_conn->ops.set_power) {
+#else /* SS Modify */
+	if (mode != c_conn->last_panel_power_mode && c_conn->ops.set_power
+		&& !(mode == SDE_MODE_DPMS_OFF && c_conn->last_panel_power_mode == SDE_MODE_DPMS_ON)
+		&& !(mode == SDE_MODE_DPMS_ON && c_conn->last_panel_power_mode == SDE_MODE_DPMS_OFF)) {
+#endif
 		display = c_conn->display;
 		set_power = c_conn->ops.set_power;
 
@@ -667,71 +656,52 @@ static int _sde_connector_update_power_locked(struct sde_connector *c_conn)
 
 	return rc;
 }
+#ifndef CONFIG_DISPLAY_SAMSUNG /* to AVOID unexpectable brightness control */
 
 static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 {
 	struct dsi_display *dsi_display;
-	struct dp_display *dp_display;
-	struct dsi_backlight_config *dsi_bl_config;
-	struct dp_backlight_config *dp_bl_config;
-	struct dp_panel *dp_panel;
+	struct dsi_backlight_config *bl_config;
 	int rc = 0;
-	u32 bl_scale, bl_scale_sv;
 
 	if (!c_conn) {
 		SDE_ERROR("Invalid params sde_connector null\n");
 		return -EINVAL;
 	}
 
-	bl_scale = c_conn->bl_scale > MAX_BL_SCALE_LEVEL ?
-			MAX_BL_SCALE_LEVEL : c_conn->bl_scale;
-	bl_scale_sv = c_conn->bl_scale_sv > MAX_SV_BL_SCALE_LEVEL ?
-			MAX_SV_BL_SCALE_LEVEL : c_conn->bl_scale_sv;
-
-	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
-		dsi_display = c_conn->display;
-		if (!dsi_display || !dsi_display->panel) {
-			SDE_ERROR("Invalid params dsi_display %pK, panel %pK\n",
-				dsi_display,
-				((dsi_display) ? dsi_display->panel : NULL));
-			return -EINVAL;
-		}
-		dsi_bl_config = &dsi_display->panel->bl_config;
-		if (!c_conn->allow_bl_update) {
-			c_conn->unset_bl_level = dsi_bl_config->bl_level;
-			return 0;
-		}
-		dsi_bl_config->bl_scale = bl_scale;
-		dsi_bl_config->bl_scale_sv = bl_scale_sv;
-		if (c_conn->unset_bl_level)
-			dsi_bl_config->bl_level = c_conn->unset_bl_level;
-
-		rc = c_conn->ops.set_backlight(&c_conn->base,
-				dsi_display, dsi_bl_config->bl_level);
-	} else if (c_conn->connector_type == DRM_MODE_CONNECTOR_eDP) {
-		dp_display = c_conn->display;
-		dp_panel = (struct dp_panel *) c_conn->drv_panel;
-		if (dp_panel) {
-			dp_bl_config = &dp_panel->bl_config;
-			if (!c_conn->allow_bl_update) {
-				c_conn->unset_bl_level = dp_bl_config->bl_level;
-				return 0;
-			}
-			dp_bl_config->bl_scale = bl_scale;
-			dp_bl_config->bl_scale_sv = bl_scale_sv;
-			if (c_conn->unset_bl_level)
-				dp_bl_config->bl_level = c_conn->unset_bl_level;
-			rc = c_conn->ops.set_backlight(&c_conn->base,
-					dp_display, dp_bl_config->bl_level);
-		} else
-			SDE_ERROR("Invalid dp_panel null\n");
+	dsi_display = c_conn->display;
+	if (!dsi_display || !dsi_display->panel) {
+		SDE_ERROR("Invalid params(s) dsi_display %pK, panel %pK\n",
+			dsi_display,
+			((dsi_display) ? dsi_display->panel : NULL));
+		return -EINVAL;
 	}
 
+	bl_config = &dsi_display->panel->bl_config;
+
+	if (!c_conn->allow_bl_update) {
+		c_conn->unset_bl_level = bl_config->bl_level;
+		return 0;
+	}
+
+	if (c_conn->unset_bl_level)
+		bl_config->bl_level = c_conn->unset_bl_level;
+
+	bl_config->bl_scale = c_conn->bl_scale > MAX_BL_SCALE_LEVEL ?
+			MAX_BL_SCALE_LEVEL : c_conn->bl_scale;
+	bl_config->bl_scale_sv = c_conn->bl_scale_sv > MAX_SV_BL_SCALE_LEVEL ?
+			MAX_SV_BL_SCALE_LEVEL : c_conn->bl_scale_sv;
+
+	SDE_DEBUG("bl_scale = %u, bl_scale_sv = %u, bl_level = %u\n",
+		bl_config->bl_scale, bl_config->bl_scale_sv,
+		bl_config->bl_level);
+	rc = c_conn->ops.set_backlight(&c_conn->base,
+			dsi_display, bl_config->bl_level);
 	c_conn->unset_bl_level = 0;
 
 	return rc;
 }
-
+#endif
 void sde_connector_set_colorspace(struct sde_connector *c_conn)
 {
 	int rc = 0;
@@ -852,7 +822,7 @@ static int _sde_connector_update_dirty_properties(
 		c_conn->colorspace_updated = false;
 		sde_connector_set_colorspace(c_conn);
 	}
-
+#ifndef CONFIG_DISPLAY_SAMSUNG /* to AVOID unexpectable brightness control */
 	/*
 	 * Special handling for postproc properties and
 	 * for updating backlight if any unset backlight level is present
@@ -861,6 +831,7 @@ static int _sde_connector_update_dirty_properties(
 		_sde_connector_update_bl_scale(c_conn);
 		c_conn->bl_scale_dirty = false;
 	}
+#endif
 
 	return 0;
 }
@@ -884,6 +855,10 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 	struct msm_display_kickoff_params params;
 	struct dsi_display *display;
 	int rc;
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+	struct samsung_display_driver_data *vdd;
+	u32 finger_mask_state;
+#endif
 
 	if (!connector) {
 		SDE_ERROR("invalid argument\n");
@@ -921,6 +896,21 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 	params.hdr_meta = &c_state->hdr_meta;
 
 	SDE_EVT32_VERBOSE(connector->base.id);
+
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
+		/* SAMSUNG_FINGERPRINT */
+		vdd = display->panel->panel_private;
+		finger_mask_state = sde_connector_get_property(c_conn->base.state,
+				CONNECTOR_PROP_FINGERPRINT_MASK);
+		vdd->finger_mask_updated = false;
+		if (finger_mask_state != vdd->finger_mask) {
+			SDE_ERROR("[FINGER MASK]updated finger mask mode %d\n", finger_mask_state);
+			vdd->finger_mask_updated = true;
+			vdd->finger_mask = finger_mask_state;
+		}
+	}
+#endif
 
 	rc = c_conn->ops.pre_kickoff(connector, c_conn->display, &params);
 
@@ -1012,6 +1002,9 @@ void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 	struct sde_connector *c_conn = NULL;
 	struct dsi_display *display;
 	struct sde_kms *sde_kms;
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+	struct samsung_display_driver_data *vdd;
+#endif
 
 	sde_kms = _sde_connector_get_kms(connector);
 	if (!sde_kms) {
@@ -1020,29 +1013,37 @@ void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 	}
 
 	c_conn = to_sde_connector(connector);
+	display = (struct dsi_display *) c_conn->display;
 
-	if (c_conn->connector_type == DRM_MODE_CONNECTOR_DSI) {
-		display = (struct dsi_display *) c_conn->display;
-
-		/*
-		 * Special handling for some panels which need atleast
-		 * one frame to be transferred to GRAM before enabling
-		 * backlight.
-		 * So delay backlight update to these panels until the
-		 * first frame commit is received from the HW.
-		 */
-		if (display->panel->bl_config.bl_update ==
-					BL_UPDATE_DELAY_UNTIL_FIRST_FRAME)
-			sde_encoder_wait_for_event(c_conn->encoder,
-					MSM_ENC_TX_COMPLETE);
-	}
-
+	/*
+	 * Special handling for some panels which need atleast
+	 * one frame to be transferred to GRAM before enabling backlight.
+	 * So delay backlight update to these panels until the
+	 * first frame commit is received from the HW.
+	 */
+	if (display->panel->bl_config.bl_update ==
+				BL_UPDATE_DELAY_UNTIL_FIRST_FRAME)
+		sde_encoder_wait_for_event(c_conn->encoder,
+				MSM_ENC_TX_COMPLETE);
 	c_conn->allow_bl_update = true;
 
 	if (!sde_in_trusted_vm(sde_kms) && c_conn->bl_device) {
 		c_conn->bl_device->props.power = FB_BLANK_UNBLANK;
 		c_conn->bl_device->props.state &= ~BL_CORE_FBBLANK;
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+		vdd = display->panel->panel_private;
+
+		if (vdd->vrr.support_vrr_based_bl &&
+				(vdd->vrr.running_vrr_mdp || vdd->vrr.running_vrr)) {
+			LCD_INFO(vdd, "skip & backup props.brightness = %d during VRR\n",
+					c_conn->bl_device->props.brightness);
+			vdd->br_info.common_br.bl_level = c_conn->bl_device->props.brightness;
+		} else {
+			backlight_update_status(c_conn->bl_device);
+		}
+#else
 		backlight_update_status(c_conn->bl_device);
+#endif
 	}
 	c_conn->panel_dead = false;
 }
@@ -2492,6 +2493,14 @@ static void _sde_connector_report_panel_dead(struct sde_connector *conn,
 		conn->base.dev, &event, (u8 *)&conn->panel_dead);
 	SDE_ERROR("esd check failed report PANEL_DEAD conn_id: %d enc_id: %d\n",
 			conn->base.base.id, conn->encoder->base.id);
+
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+	{
+		struct dsi_display *display = conn->display;
+		struct samsung_display_driver_data *vdd = display->panel->panel_private;
+		vdd->panel_dead = true;
+	}
+#endif
 }
 
 int sde_connector_esd_status(struct drm_connector *conn)
@@ -2516,8 +2525,14 @@ int sde_connector_esd_status(struct drm_connector *conn)
 		mutex_unlock(&sde_conn->lock);
 		return -ETIMEDOUT;
 	}
+
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+	ret = sde_conn->ops.check_status(&sde_conn->base,
+					 sde_conn->display, false);
+#else
 	ret = sde_conn->ops.check_status(&sde_conn->base,
 					 sde_conn->display, true);
+#endif
 	mutex_unlock(&sde_conn->lock);
 
 	if (ret <= 0) {
@@ -2569,8 +2584,10 @@ static void sde_connector_check_status_work(struct work_struct *work)
 		/* If debugfs property is not set then take default value */
 		interval = conn->esd_status_interval ?
 			conn->esd_status_interval : STATUS_CHECK_INTERVAL_MS;
+#if !defined(CONFIG_DISPLAY_SAMSUNG)
 		schedule_delayed_work(&conn->status_work,
 			msecs_to_jiffies(interval));
+#endif
 		return;
 	}
 
@@ -2870,6 +2887,13 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 	msm_property_install_range(&c_conn->property_info, "bl_scale",
 		0x0, 0, MAX_BL_SCALE_LEVEL, MAX_BL_SCALE_LEVEL,
 		CONNECTOR_PROP_BL_SCALE);
+
+#if defined(CONFIG_DISPLAY_SAMSUNG)
+	/* SAMSUNG_FINGERPRINT */
+	msm_property_install_range(&c_conn->property_info, "fingerprint_mask",
+		0x0, 0, 100, 0,
+		CONNECTOR_PROP_FINGERPRINT_MASK);
+#endif
 
 	msm_property_install_range(&c_conn->property_info, "sv_bl_scale",
 		0x0, 0, MAX_SV_BL_SCALE_LEVEL, MAX_SV_BL_SCALE_LEVEL,

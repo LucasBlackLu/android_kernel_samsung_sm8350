@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  */
-
 
 #include <linux/delay.h>
 #include <linux/iopoll.h>
@@ -11,8 +9,9 @@
 #include "dp_catalog.h"
 #include "dp_reg.h"
 #include "dp_debug.h"
-#include "dp_link.h"
-#include "dp_lphw_hpd.h"
+#if defined(CONFIG_SEC_DISPLAYPORT)
+#include "secdp.h"
+#endif
 
 #define DP_GET_MSB(x)	(x >> 8)
 #define DP_GET_LSB(x)	(x & 0xff)
@@ -150,6 +149,11 @@ static u32 dp_read_hw(struct dp_catalog_private *catalog,
 {
 	u32 data = 0;
 
+#if defined(CONFIG_SEC_DISPLAYPORT)
+	if (secdp_phy_reset_check())
+		return 0;
+#endif
+
 	data = readl_relaxed(io_data->io.base + offset);
 
 	return data;
@@ -158,6 +162,11 @@ static u32 dp_read_hw(struct dp_catalog_private *catalog,
 static void dp_write_hw(struct dp_catalog_private *catalog,
 	struct dp_io_data *io_data, u32 offset, u32 data)
 {
+#if defined(CONFIG_SEC_DISPLAYPORT)
+	if (secdp_phy_reset_check())
+		return;
+#endif
+
 	writel_relaxed(data, io_data->io.base + offset);
 }
 
@@ -274,7 +283,16 @@ static int dp_catalog_aux_clear_trans(struct dp_catalog_aux *aux, bool read)
 
 	if (read) {
 		data = dp_read(DP_AUX_TRANS_CTRL);
+#if defined(CONFIG_SEC_DISPLAYPORT)
+		/* Prevent_CXX Major defect - Invalid Assignment: The type size
+		 * of both side variables are different:
+		 * "data" is 4 ( unsigned int ) and "data & 0xfffffffffffffdffUL
+		 * " is 8 ( unsigned long )
+		 */
+		data &= ((u32)~BIT(9));
+#else
 		data &= ~BIT(9);
+#endif
 		dp_write(DP_AUX_TRANS_CTRL, data);
 	} else {
 		dp_write(DP_AUX_TRANS_CTRL, 0);
@@ -298,6 +316,10 @@ static void dp_catalog_aux_clear_hw_interrupts(struct dp_catalog_aux *aux)
 	io_data = catalog->io.dp_phy;
 
 	data = dp_read(DP_PHY_AUX_INTERRUPT_STATUS);
+#if defined(CONFIG_SEC_DISPLAYPORT)
+	if (data)
+		DP_DEBUG("PHY_AUX_INTERRUPT_STATUS=0x%08x\n", data);
+#endif
 
 	dp_write(DP_PHY_AUX_INTERRUPT_CLEAR, 0x1f);
 	wmb(); /* make sure 0x1f is written before next write */
@@ -373,6 +395,13 @@ static void dp_catalog_aux_update_cfg(struct dp_catalog_aux *aux,
 		DP_ERR("invalid input\n");
 		return;
 	}
+
+#if defined(CONFIG_SEC_DISPLAYPORT)
+	if (!secdp_get_cable_status()) {
+		DP_INFO("cable is out\n");
+		return;
+	}
+#endif
 
 	catalog = dp_catalog_get_priv(aux);
 
@@ -1062,6 +1091,8 @@ static void dp_catalog_ctrl_state_ctrl(struct dp_catalog_ctrl *ctrl, u32 state)
 		return;
 	}
 
+	DP_DEBUG("+++\n");
+
 	catalog = dp_catalog_get_priv(ctrl);
 	io_data = catalog->io.dp_link;
 
@@ -1153,6 +1184,8 @@ static void dp_catalog_panel_config_dto(struct dp_catalog_panel *panel,
 		return;
 	}
 
+	DP_DEBUG("+++\n");
+
 	catalog = dp_catalog_get_priv(panel);
 	io_data = catalog->io.dp_link;
 
@@ -1228,6 +1261,8 @@ static void dp_catalog_ctrl_mainlink_ctrl(struct dp_catalog_ctrl *ctrl,
 		DP_ERR("invalid input\n");
 		return;
 	}
+
+	DP_DEBUG("+++, enable:%d\n", enable);
 
 	catalog = dp_catalog_get_priv(ctrl);
 	io_data = catalog->io.dp_link;
@@ -1571,7 +1606,9 @@ static void dp_catalog_panel_dp_flush(struct dp_catalog_panel *panel,
 static void dp_catalog_panel_pps_flush(struct dp_catalog_panel *panel)
 {
 	dp_catalog_panel_dp_flush(panel, DP_PPS_FLUSH);
+#if !defined(CONFIG_SEC_DISPLAYPORT)
 	DP_DEBUG("pps flush for stream:%d\n", panel->stream_id);
+#endif
 }
 
 static void dp_catalog_panel_dhdr_flush(struct dp_catalog_panel *panel)
@@ -1786,6 +1823,22 @@ static void dp_catalog_ctrl_update_vx_px(struct dp_catalog_ctrl *ctrl,
 		value0 = vm_voltage_swing[v_level][p_level];
 		value1 = vm_pre_emphasis[v_level][p_level];
 	}
+
+#ifdef SECDP_SELF_TEST
+	if (secdp_self_test_status(ST_VOLTAGE_TUN) >= 0) {
+		u8 val = secdp_self_test_get_arg(ST_VOLTAGE_TUN)[v_level*4 + p_level];
+
+		DP_INFO("value0 : 0x%02x => 0x%02x\n", value0, val);
+		value0 = val;
+	}
+
+	if (secdp_self_test_status(ST_PREEM_TUN) >= 0) {
+		u8 val = secdp_self_test_get_arg(ST_PREEM_TUN)[v_level*4 + p_level];
+
+		DP_INFO("value0 : 0x%02x => 0x%02x\n", value1, val);
+		value1 = val;
+	}
+#endif
 
 	/* program default setting first */
 
@@ -2287,21 +2340,10 @@ end:
 	return 0;
 }
 
-static void dp_catalog_hpd_set_edp_mode(struct dp_catalog_hpd *hpd, bool is_edp)
-{
-	if (!hpd) {
-		DP_ERR("invalid input\n");
-		return;
-	}
-
-	hpd->is_edp = is_edp;
-}
-
 static void dp_catalog_hpd_config_hpd(struct dp_catalog_hpd *hpd, bool en)
 {
 	struct dp_catalog_private *catalog;
 	struct dp_io_data *io_data;
-	struct dp_parser *parser;
 
 	if (!hpd) {
 		DP_ERR("invalid input\n");
@@ -2310,20 +2352,13 @@ static void dp_catalog_hpd_config_hpd(struct dp_catalog_hpd *hpd, bool en)
 
 	catalog = dp_catalog_get_priv(hpd);
 	io_data = catalog->io.dp_aux;
-	parser = catalog->parser;
 
 	if (en) {
 		u32 reftimer = dp_read(DP_DP_HPD_REFTIMER);
 
-		/*
-		 * Arm only the UNPLUG and HPD_IRQ interrupts for DP and pluggable EDP
-		 * whereas for buitin EDP arm only the HPD_IRQ interrupt
-		 */
+		/* Arm only the UNPLUG and HPD_IRQ interrupts */
 		dp_write(DP_DP_HPD_INT_ACK, 0xF);
-		if ((hpd->is_edp) && (!parser->ext_hpd_en))
-			dp_write(DP_DP_HPD_INT_MASK, 0x2);
-		else
-			dp_write(DP_DP_HPD_INT_MASK, 0xA);
+		dp_write(DP_DP_HPD_INT_MASK, 0xA);
 
 		/* Enable REFTIMER to count 1ms */
 		reftimer |= BIT(16);
@@ -2344,7 +2379,7 @@ static void dp_catalog_hpd_config_hpd(struct dp_catalog_hpd *hpd, bool en)
 
 static u32 dp_catalog_hpd_get_interrupt(struct dp_catalog_hpd *hpd)
 {
-	u32 isr = 0, isr_mask = 0;
+	u32 isr = 0;
 	struct dp_catalog_private *catalog;
 	struct dp_io_data *io_data;
 
@@ -2359,35 +2394,7 @@ static u32 dp_catalog_hpd_get_interrupt(struct dp_catalog_hpd *hpd)
 	isr = dp_read(DP_DP_HPD_INT_STATUS);
 	dp_write(DP_DP_HPD_INT_ACK, (isr & 0xf));
 
-	isr_mask = dp_read(DP_DP_HPD_INT_MASK);
-
-	return (isr & isr_mask);
-}
-
-static bool dp_catalog_hpd_wait_for_edp_panel_ready(struct dp_catalog_hpd *hpd)
-{
-	u32 reg, state;
-	void __iomem *base;
-	bool success = true;
-	u32 const poll_sleep_us = 2000;
-	u32 const pll_timeout_us = 1000000;
-	struct dp_catalog_private *catalog;
-
-	catalog = dp_catalog_get_priv(hpd);
-
-	base = catalog->io.dp_aux->io.base;
-
-	reg = DP_DP_HPD_INT_STATUS;
-
-	if (readl_poll_timeout_atomic((base + reg), state,
-			((state & DP_HPD_STATE_STATUS_CONNECTED) > 0),
-			poll_sleep_us, pll_timeout_us)) {
-		DP_ERR("DP_HPD_STATE_STATUS CONNECTED bit is still low, status=%x\n", state);
-
-		success = false;
-	}
-
-	return success;
+	return isr;
 }
 
 static void dp_catalog_audio_init(struct dp_catalog_audio *audio)
@@ -2791,6 +2798,10 @@ static int dp_catalog_init(struct device *dev, struct dp_catalog *dp_catalog,
 	struct dp_catalog_private *catalog = container_of(dp_catalog,
 				struct dp_catalog_private, dp_catalog);
 
+#if defined(CONFIG_SEC_DISPLAYPORT)
+	dp_catalog->parser = parser;
+#endif
+
 	switch (parser->hw_cfg.phy_version) {
 	case DP_PHY_VERSION_4_2_0:
 		dp_catalog->sub = dp_catalog_get_v420(dev, dp_catalog,
@@ -2798,10 +2809,6 @@ static int dp_catalog_init(struct device *dev, struct dp_catalog *dp_catalog,
 		break;
 	case DP_PHY_VERSION_2_0_0:
 		dp_catalog->sub = dp_catalog_get_v200(dev, dp_catalog,
-					&catalog->io);
-		break;
-	case DP_PHY_VERSION_5_0_0:
-		dp_catalog->sub = dp_catalog_get_v500(dev, dp_catalog,
 					&catalog->io);
 		break;
 	default:
@@ -2884,8 +2891,6 @@ struct dp_catalog *dp_catalog_get(struct device *dev, struct dp_parser *parser)
 	struct dp_catalog_hpd hpd = {
 		.config_hpd	= dp_catalog_hpd_config_hpd,
 		.get_interrupt	= dp_catalog_hpd_get_interrupt,
-		.wait_for_edp_panel_ready = dp_catalog_hpd_wait_for_edp_panel_ready,
-		.set_edp_mode = dp_catalog_hpd_set_edp_mode,
 	};
 	struct dp_catalog_audio audio = {
 		.init       = dp_catalog_audio_init,
@@ -2936,7 +2941,6 @@ struct dp_catalog *dp_catalog_get(struct device *dev, struct dp_parser *parser)
 	strlcpy(catalog->exe_mode, "hw", sizeof(catalog->exe_mode));
 
 	dp_catalog = &catalog->dp_catalog;
-	dp_catalog->parser = parser;
 
 	dp_catalog->aux   = aux;
 	dp_catalog->ctrl  = ctrl;
