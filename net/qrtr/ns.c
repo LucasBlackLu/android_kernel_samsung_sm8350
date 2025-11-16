@@ -19,7 +19,7 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/qrtr.h>
 
-#define NS_LOG_PAGE_CNT 4
+#define NS_LOG_PAGE_CNT 8
 static void *ns_ilc;
 #define NS_INFO(x, ...) ipc_log_string(ns_ilc, x, ##__VA_ARGS__)
 
@@ -104,7 +104,7 @@ unsigned int qrtr_get_service_id(unsigned int node_id, unsigned int port_id)
 	struct qrtr_node *node;
 	unsigned long index;
 
-	node = xa_load(&nodes, node_id);
+	node = node_get(node_id);
 	if (!node)
 		return 0;
 
