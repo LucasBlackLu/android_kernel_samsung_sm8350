@@ -200,4 +200,8 @@ static inline int pil_reclaim_mem(struct pil_desc *desc, phys_addr_t addr,
 static inline bool pil_is_timeout_disabled(void) { return false; }
 #endif
 
+#ifdef HDM_SUPPORT
+extern int hdm_cp_support;
+#endif /* HDM_SUPPORT */
+
 #endif

@@ -557,15 +557,9 @@ static long spss_utils_ioctl(struct file *file,
 			return -EINVAL;
 		}
 		ret = spss_wait_for_event(req);
+		copy_to_user((void __user *)arg, data, size);
 		if (ret < 0)
 			return ret;
-
-		ret = copy_to_user((void __user *)arg, data, size);
-		if (ret) {
-			pr_err("cmd [0x%x] copy_to_user failed - %d\n", cmd, ret);
-			return ret;
-		}
-
 		break;
 
 	case SPSS_IOC_SIGNAL_EVENT:
@@ -575,14 +569,9 @@ static long spss_utils_ioctl(struct file *file,
 			return -EINVAL;
 		}
 		ret = spss_signal_event(req);
+		copy_to_user((void __user *)arg, data, size);
 		if (ret < 0)
 			return ret;
-
-		ret = copy_to_user((void __user *)arg, data, size);
-		if (ret) {
-			pr_err("cmd [0x%x] copy_to_user failed - %d\n", cmd, ret);
-			return ret;
-		}
 		break;
 
 	case SPSS_IOC_IS_EVENT_SIGNALED:
@@ -592,15 +581,9 @@ static long spss_utils_ioctl(struct file *file,
 			return -EINVAL;
 		}
 		ret = spss_is_event_signaled(req);
+		copy_to_user((void __user *)arg, data, size);
 		if (ret < 0)
 			return ret;
-
-		ret = copy_to_user((void __user *)arg, data, size);
-		if (ret) {
-			pr_err("cmd [0x%x] copy_to_user failed - %d\n", cmd, ret);
-			return ret;
-		}
-
 		break;
 
 	case SPSS_IOC_SET_SSR_STATE:
