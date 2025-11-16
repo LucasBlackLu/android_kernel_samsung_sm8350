@@ -17,7 +17,6 @@
 };
 
 &pcie_i2c_ctrl {
-	ep_reset_postlinkup;
 	reg_update = <0x82c030 0x1
 			0x828000 0x3
 			0x82bd00 0x8
@@ -38,9 +37,6 @@
 	qcom,no-l1-supported;
 	qcom,no-l1ss-supported;
 	qcom,no-aux-clk-sync;
-	qcom,bdf-halt-dis;
-	qcom,wr-halt-size = <0x1e>;
-
 };
 
 &pcie0_bus2_dev1_fn0 {
@@ -68,13 +64,11 @@
 };
 
 &wifi0 {
-	/* QCN9000 5G with SBS filter */
 	status = "ok";
-	board_id = <0xa3>;
+	board_id = <0xa0>;
 };
 
 &wifi1 {
-	/* QCN9000 2G */
 	status = "ok";
 	board_id = <0xa1>;
 };
