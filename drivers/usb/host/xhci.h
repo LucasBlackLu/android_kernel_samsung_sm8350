@@ -1902,6 +1902,8 @@ struct xhci_hcd {
 	unsigned		hw_lpm_support:1;
 	/* Broken Suspend flag for SNPS Suspend resume issue */
 	unsigned		broken_suspend:1;
+	/* Indicates that omitting hcd is supported if root hub has no ports */
+	unsigned		allow_single_roothub:1;
 	/* cached usb2 extened protocol capabilites */
 	u32                     *ext_caps;
 	unsigned int            num_ext_caps;
@@ -1953,6 +1955,30 @@ static inline struct xhci_hcd *hcd_to_xhci(struct usb_hcd *hcd)
 static inline struct usb_hcd *xhci_to_hcd(struct xhci_hcd *xhci)
 {
 	return xhci->main_hcd;
+}
+
+static inline struct usb_hcd *xhci_get_usb3_hcd(struct xhci_hcd *xhci)
+{
+	if (xhci->shared_hcd)
+		return xhci->shared_hcd;
+
+	if (!xhci->usb2_rhub.num_ports)
+		return xhci->main_hcd;
+
+	return NULL;
+}
+
+static inline bool xhci_hcd_is_usb3(struct usb_hcd *hcd)
+{
+	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
+
+	return hcd == xhci_get_usb3_hcd(xhci);
+}
+
+static inline bool xhci_has_one_roothub(struct xhci_hcd *xhci)
+{
+	return xhci->allow_single_roothub &&
+	       (!xhci->usb2_rhub.num_ports || !xhci->usb3_rhub.num_ports);
 }
 
 #define xhci_dbg(xhci, fmt, args...) \
@@ -2623,6 +2649,24 @@ static inline const char *xhci_decode_portsc(char *str, u32 portsc)
 	return str;
 }
 
+static inline const char *xhci_ep_state_string(u8 state)
+{
+	switch (state) {
+	case EP_STATE_DISABLED:
+		return "disabled";
+	case EP_STATE_RUNNING:
+		return "running";
+	case EP_STATE_HALTED:
+		return "halted";
+	case EP_STATE_STOPPED:
+		return "stopped";
+	case EP_STATE_ERROR:
+		return "error";
+	default:
+		return "INVALID";
+	}
+}
+
 static inline const char *xhci_decode_doorbell(u32 slot, u32 doorbell)
 {
 	static char str[256];
@@ -2650,24 +2694,6 @@ static inline const char *xhci_decode_doorbell(u32 slot, u32 doorbell)
 		ret = sprintf(str + ret, " Stream %d", stream);
 
 	return str;
-}
-
-static inline const char *xhci_ep_state_string(u8 state)
-{
-	switch (state) {
-	case EP_STATE_DISABLED:
-		return "disabled";
-	case EP_STATE_RUNNING:
-		return "running";
-	case EP_STATE_HALTED:
-		return "halted";
-	case EP_STATE_STOPPED:
-		return "stopped";
-	case EP_STATE_ERROR:
-		return "error";
-	default:
-		return "INVALID";
-	}
 }
 
 static inline const char *xhci_ep_type_string(u8 type)

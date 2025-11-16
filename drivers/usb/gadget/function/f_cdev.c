@@ -732,13 +732,26 @@ static int usb_cser_notify(struct f_cdev *port, u8 type, u16 value,
 static int port_notify_serial_state(struct cserial *cser)
 {
 	struct f_cdev *port = cser_to_port(cser);
-	int status;
+	int status, ret;
 	unsigned long flags;
 	struct usb_composite_dev *cdev = port->port_usb.func.config->cdev;
+	struct usb_function *func = &cser->func;
+	struct usb_gadget *gadget;
 
 	if (port->is_suspended) {
+		gadget = cser->func.config->cdev->gadget;
 		port->pending_state_notify = true;
 		pr_debug("%s: port is suspended\n", __func__);
+		if (usb_cser_get_remote_wakeup_capable(func, gadget)) {
+			if (gadget->speed >= USB_SPEED_SUPER && port->func_is_suspended) {
+				ret = usb_func_wakeup(func);
+				port->func_wakeup_pending = (ret == -EAGAIN) ? true : false;
+			} else {
+				ret = usb_gadget_wakeup(gadget);
+			}
+		} else {
+			pr_debug("%s remote-wakeup not capable\n", __func__);
+		}
 		return 0;
 	}
 
@@ -1967,7 +1980,7 @@ static struct f_cdev *f_cdev_alloc(char *func_name, int portno)
 	port->dev.parent = NULL;
 	port->dev.release = cdev_device_release;
 	port->dev.devt = MKDEV(major, port->minor);
-	dev_set_name(&port->dev, port->name);
+	dev_set_name(&port->dev, "%s", port->name);
 	ret = cdev_device_add(&port->fcdev_cdev, &port->dev);
 	if (ret) {
 		pr_err("Failed to add cdev for port(%s)\n", port->name);

@@ -13,6 +13,9 @@
 #include <linux/slab.h>
 #include <linux/dmapool.h>
 #include <linux/dma-mapping.h>
+#if IS_ENABLED(CONFIG_USB_HOST_CERTIFICATION)
+#define MAX_HC_SLOT_LIMIT 15
+#endif
 
 #include "xhci.h"
 #include "xhci-trace.h"
@@ -983,12 +986,24 @@ int xhci_alloc_virt_device(struct xhci_hcd *xhci, int slot_id,
 {
 	struct xhci_virt_device *dev;
 	int i;
+#if IS_ENABLED(CONFIG_USB_HOST_CERTIFICATION)
+	int count = 0;
+#endif
 
 	/* Slot ID 0 is reserved */
 	if (slot_id == 0 || xhci->devs[slot_id]) {
 		xhci_warn(xhci, "Bad Slot ID %d\n", slot_id);
 		return 0;
 	}
+
+#if IS_ENABLED(CONFIG_USB_HOST_CERTIFICATION)
+	for (i = 0; i < MAX_HC_SLOTS; i++) {
+		if (xhci->devs[i] && xhci->devs[i]->udev)
+			count++;
+	}
+	if (count >= MAX_HC_SLOT_LIMIT)
+		goto fail2;
+#endif
 
 	dev = kzalloc(sizeof(*dev), flags);
 	if (!dev)
@@ -1044,6 +1059,10 @@ fail:
 		xhci_free_container_ctx(xhci, dev->out_ctx);
 	kfree(dev);
 
+#if IS_ENABLED(CONFIG_USB_HOST_CERTIFICATION)
+fail2:
+#endif
+
 	return 0;
 }
 
@@ -1086,7 +1105,7 @@ static u32 xhci_find_real_port_number(struct xhci_hcd *xhci,
 	struct usb_hcd *hcd;
 
 	if (udev->speed >= USB_SPEED_SUPER)
-		hcd = xhci->shared_hcd;
+		hcd = xhci_get_usb3_hcd(xhci);
 	else
 		hcd = xhci->main_hcd;
 
@@ -2494,10 +2513,11 @@ static int xhci_setup_port_arrays(struct xhci_hcd *xhci, gfp_t flags)
 		xhci->usb2_rhub.num_ports = USB_MAXCHILDREN;
 	}
 
-	/*
-	 * Note we could have all USB 3.0 ports, or all USB 2.0 ports.
-	 * Not sure how the USB core will handle a hub with no ports...
-	 */
+	if (!xhci->usb2_rhub.num_ports)
+		xhci_info(xhci, "USB2 root hub has no ports\n");
+
+	if (!xhci->usb3_rhub.num_ports)
+		xhci_info(xhci, "USB3 root hub has no ports\n");
 
 	xhci_create_rhub_port_array(xhci, &xhci->usb2_rhub, flags);
 	xhci_create_rhub_port_array(xhci, &xhci->usb3_rhub, flags);

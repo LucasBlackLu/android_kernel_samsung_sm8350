@@ -29,6 +29,9 @@
 #include <linux/ulpi/interface.h>
 
 #include <linux/phy/phy.h>
+#if IS_ENABLED(CONFIG_USB_CHARGING_EVENT)
+#include "../../battery/common/sec_charging_common.h"
+#endif
 
 #define DWC3_MSG_MAX	500
 
@@ -777,6 +780,7 @@ struct dwc3_ep {
 #define DWC3_EP_PENDING_REQUEST	BIT(5)
 #define DWC3_EP_DELAY_START	BIT(6)
 #define DWC3_EP_PENDING_CLEAR_STALL	BIT(11)
+#define DWC3_EP_DELAY_STOP			BIT(13)
 
 	/* This last one is specific to EP0 */
 #define DWC3_EP0_DIR_IN		BIT(31)
@@ -860,6 +864,11 @@ enum gadget_state {
 	DWC3_GADGET_SOFT_CONN,
 	DWC3_GADGET_CABLE_CONN,
 	DWC3_GADGET_ACTIVE,
+};
+
+enum {
+	RELEASE	= 0,
+	NOTIFY	= 1,
 };
 
 /* TRB Length, PCM and Status */
@@ -1423,7 +1432,31 @@ struct dwc3 {
 	wait_queue_head_t	wait_linkstate;
 	struct work_struct	remote_wakeup_work;
 	bool			dual_port;
+
+#if IS_ENABLED(CONFIG_USB_CHARGING_EVENT)
+	struct work_struct	set_vbus_current_work;
+	int			vbus_current; /* 0 : 100mA, 1 : 500mA, 2: 900mA */
+#endif
+	struct delayed_work usb_event_work;
+	ktime_t rst_time_before;
+	ktime_t rst_time_first;
+	int rst_err_cnt;
+	bool rst_err_noti;
+	bool event_state;
+	bool acc_dev_status;
+	int usb_function_info;
 };
+
+#define GADGET_MTP	0x01
+#define GADGET_RNDIS	0x02
+#define GADGET_ACCESSORY	0x04
+#define GADGET_ADB	0x08
+#define GADGET_ACM	0x10
+#define GADGET_DM	0x20
+#define GADGET_MIDI	0x40
+#define GADGET_CONN_GADGET	0x80
+
+#define ERR_RESET_CNT	4
 
 #define INCRX_BURST_MODE 0
 #define INCRX_UNDEF_LENGTH_BURST_MODE 1
@@ -1627,6 +1660,7 @@ int dwc3_gadget_resize_tx_fifos(struct dwc3 *dwc, struct dwc3_ep *dep);
 void dwc3_gadget_disable_irq(struct dwc3 *dwc);
 int dwc3_core_init(struct dwc3 *dwc);
 int dwc3_event_buffers_setup(struct dwc3 *dwc);
+void dwc3_remove_requests(struct dwc3 *dwc, struct dwc3_ep *dep);
 #else
 static inline int dwc3_gadget_init(struct dwc3 *dwc)
 { return 0; }
@@ -1657,6 +1691,8 @@ static int dwc3_core_init(struct dwc3 *dwc)
 { return 0; }
 static int dwc3_event_buffers_setup(struct dwc3 *dwc)
 { return 0; }
+static inline void dwc3_remove_requests(struct dwc3 *dwc, struct dwc3_ep *dep)
+{ }
 #endif
 
 #if IS_ENABLED(CONFIG_USB_DWC3_DUAL_ROLE)

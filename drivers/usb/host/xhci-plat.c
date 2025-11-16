@@ -19,11 +19,17 @@
 #include <linux/slab.h>
 #include <linux/acpi.h>
 #include <linux/usb/of.h>
+#ifdef CONFIG_SND_QC_USB_AUDIO_MODULE
+#include <linux/usb/qc_usb_audio.h>
+#endif
 
 #include "xhci.h"
 #include "xhci-plat.h"
 #include "xhci-mvebu.h"
 #include "xhci-rcar.h"
+
+#undef dev_dbg
+#define dev_dbg dev_err
 
 static struct hc_driver __read_mostly xhci_plat_hc_driver;
 
@@ -171,7 +177,7 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	struct device		*sysdev, *tmpdev;
 	struct xhci_hcd		*xhci;
 	struct resource         *res;
-	struct usb_hcd		*hcd;
+	struct usb_hcd		*hcd, *usb3_hcd;
 	int			ret;
 	int			irq;
 	struct xhci_plat_priv	*priv = NULL;
@@ -246,6 +252,8 @@ static int xhci_plat_probe(struct platform_device *pdev)
 
 	xhci = hcd_to_xhci(hcd);
 
+	xhci->allow_single_roothub = 1;
+
 	/*
 	 * Not all platforms have clks so it is not an error if the
 	 * clock do not exist.
@@ -291,12 +299,6 @@ static int xhci_plat_probe(struct platform_device *pdev)
 		device_init_wakeup(hcd->self.controller, 1);
 
 	xhci->main_hcd = hcd;
-	xhci->shared_hcd = __usb_create_hcd(driver, sysdev, &pdev->dev,
-			dev_name(&pdev->dev), hcd);
-	if (!xhci->shared_hcd) {
-		ret = -ENOMEM;
-		goto disable_clk;
-	}
 
 	/* imod_interval is the interrupt moderation value in nanoseconds. */
 	xhci->imod_interval = 40000;
@@ -321,16 +323,15 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	if (IS_ERR(hcd->usb_phy)) {
 		ret = PTR_ERR(hcd->usb_phy);
 		if (ret == -EPROBE_DEFER)
-			goto put_usb3_hcd;
+			goto disable_clk;
 		hcd->usb_phy = NULL;
 	} else {
 		ret = usb_phy_init(hcd->usb_phy);
 		if (ret)
-			goto put_usb3_hcd;
+			goto disable_clk;
 	}
 
 	hcd->tpl_support = of_usb_host_tpl_support(sysdev->of_node);
-	xhci->shared_hcd->tpl_support = hcd->tpl_support;
 
 	if (priv) {
 		ret = xhci_priv_plat_setup(hcd);
@@ -345,16 +346,41 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	if (ret)
 		goto disable_usb_phy;
 
-	if (HCC_MAX_PSA(xhci->hcc_params) >= 4)
-		xhci->shared_hcd->can_do_streams = 1;
+	if (!xhci_has_one_roothub(xhci)) {
+		xhci->shared_hcd = __usb_create_hcd(driver, sysdev, &pdev->dev,
+						    dev_name(&pdev->dev), hcd);
+		if (!xhci->shared_hcd) {
+			ret = -ENOMEM;
+			goto dealloc_usb2_hcd;
+		}
 
-	ret = usb_add_hcd(xhci->shared_hcd, irq, IRQF_SHARED);
-	if (ret)
-		goto dealloc_usb2_hcd;
+		xhci->shared_hcd->tpl_support = hcd->tpl_support;
+	}
+
+	usb3_hcd = xhci_get_usb3_hcd(xhci);
+	if (usb3_hcd && HCC_MAX_PSA(xhci->hcc_params) >= 4)
+		usb3_hcd->can_do_streams = 1;
+
+	if (xhci->shared_hcd) {
+		ret = usb_add_hcd(xhci->shared_hcd, irq, IRQF_SHARED);
+		if (ret)
+			goto put_usb3_hcd;
+	}
+
+#ifdef CONFIG_SND_QC_USB_AUDIO_MODULE
+	ret = qc_usb_audio_init(pdev->dev.parent, pdev);
+	if (ret) {
+		dev_err(&pdev->dev, "USB Audio INIT fail\n");
+		return ret;
+	} else {
+		dev_info(&pdev->dev, "USB Audio offloading is supported\n");
+	}
+#endif
 
 	device_enable_async_suspend(&pdev->dev);
 	if (device_may_wakeup(sysdev)) {
-		device_wakeup_enable(&xhci->shared_hcd->self.root_hub->dev);
+		if (xhci->shared_hcd)
+			device_wakeup_enable(&xhci->shared_hcd->self.root_hub->dev);
 		device_wakeup_enable(&hcd->self.root_hub->dev);
 	}
 
@@ -364,14 +390,14 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	return 0;
 
 
+put_usb3_hcd:
+	usb_put_hcd(xhci->shared_hcd);
+
 dealloc_usb2_hcd:
 	usb_remove_hcd(hcd);
 
 disable_usb_phy:
 	usb_phy_shutdown(hcd->usb_phy);
-
-put_usb3_hcd:
-	usb_put_hcd(xhci->shared_hcd);
 
 disable_clk:
 	pm_runtime_put_noidle(&pdev->dev);
@@ -395,15 +421,32 @@ static int xhci_plat_remove(struct platform_device *dev)
 	struct clk *reg_clk = xhci->reg_clk;
 	struct usb_hcd *shared_hcd = xhci->shared_hcd;
 
+#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
+		/* In order to prevent kernel panic */
+		if (!pm_runtime_suspended(&xhci->shared_hcd->self.root_hub->dev)) {
+			pr_info("%s, shared_hcd pm_runtime_forbid\n", __func__);
+			pm_runtime_forbid(&xhci->shared_hcd->self.root_hub->dev);
+		}
+		if (!pm_runtime_suspended(&xhci->main_hcd->self.root_hub->dev)) {
+			pr_info("%s, main_hcd pm_runtime_forbid\n", __func__);
+			pm_runtime_forbid(&xhci->main_hcd->self.root_hub->dev);
+		}
+#endif
+
 	pm_runtime_get_sync(&dev->dev);
 	xhci->xhc_state |= XHCI_STATE_REMOVING;
 
-	usb_remove_hcd(shared_hcd);
+	if (shared_hcd)
+		usb_remove_hcd(shared_hcd);
+
 	usb_phy_shutdown(hcd->usb_phy);
 
 	usb_remove_hcd(hcd);
-	xhci->shared_hcd = NULL;
-	usb_put_hcd(shared_hcd);
+
+	if (shared_hcd) {
+		xhci->shared_hcd = NULL;
+		usb_put_hcd(shared_hcd);
+	}
 
 	clk_disable_unprepare(clk);
 	clk_disable_unprepare(reg_clk);
