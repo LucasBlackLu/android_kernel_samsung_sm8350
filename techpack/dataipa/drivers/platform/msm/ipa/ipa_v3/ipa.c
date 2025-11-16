@@ -237,18 +237,6 @@ static void ipa_pci_io_resume(struct pci_dev *pci_dev)
 {
 }
 
-#ifndef CONFIG_PCI
-static inline void pci_release_region(struct pci_dev *pci_dev, int bar)
-{
-}
-
-static inline int pci_request_region(struct pci_dev *pci_dev, int bar,
-				     const char *res_name)
-{
-	return -EINVAL;
-}
-#endif
-
 /* PCI Error Recovery */
 static const struct pci_error_handlers ipa_pci_err_handler = {
 	.error_detected = ipa_pci_io_error_detected,
@@ -468,7 +456,7 @@ EXPORT_SYMBOL(ipa_smmu_free_sgt);
 
 static int ipa_pm_notify(struct notifier_block *b, unsigned long event, void *p)
 {
-	IPADBG("Entry\n");
+	IPAERR("Entry\n");
 	switch (event) {
 		case PM_POST_SUSPEND:
 #ifdef CONFIG_DEEPSLEEP
@@ -480,7 +468,7 @@ static int ipa_pm_notify(struct notifier_block *b, unsigned long event, void *p)
 #endif
 			break;
 	}
-	IPADBG("Exit\n");
+	IPAERR("Exit\n");
 	return NOTIFY_DONE;
 }
 
@@ -3677,17 +3665,16 @@ static void ipa3_halt_q6_gsi_channels(bool prod)
 					gsi_ep_cfg->ipa_gsi_chan_num,
 					gsi_ep_cfg->ee, &code);
 			}
-			if (ret == GSI_STATUS_SUCCESS) {
+			if (ret == GSI_STATUS_SUCCESS)
 				IPADBG("halted gsi ch %d ee %d with code %d\n",
 				gsi_ep_cfg->ipa_gsi_chan_num,
 				gsi_ep_cfg->ee,
 				code);
-			} else {
+			else
 				IPAERR("failed to halt ch %d ee %d code %d\n",
 				gsi_ep_cfg->ipa_gsi_chan_num,
 				gsi_ep_cfg->ee,
 				code);
-			}
 		}
 	}
 }
@@ -7026,6 +7013,22 @@ sched_fw_load:
 		&ipa3_fw_loading_work);
 }
 
+#if defined(CONFIG_QGKI)
+static bool disable_cpboot;
+static int __init get_cpboot_status(char *str)
+{
+
+	if(!strncmp(str,"disable",7))
+		disable_cpboot = true;
+	else
+		disable_cpboot = false;
+
+	pr_warn("%s : disable_cpboot:%u\n",__func__,disable_cpboot);
+	return 0;
+}
+early_param("androidboot.cpboot", get_cpboot_status);
+#endif
+
 static ssize_t ipa3_write(struct file *file, const char __user *buf,
 			  size_t count, loff_t *ppos)
 {
@@ -7034,6 +7037,11 @@ static ssize_t ipa3_write(struct file *file, const char __user *buf,
 	char dbg_buff[32] = { 0 };
 	int i = 0;
 
+#if defined(CONFIG_QGKI)
+	if(disable_cpboot)
+		return -ENODEV;
+#endif
+		
 	if (count >= sizeof(dbg_buff))
 		return -EFAULT;
 

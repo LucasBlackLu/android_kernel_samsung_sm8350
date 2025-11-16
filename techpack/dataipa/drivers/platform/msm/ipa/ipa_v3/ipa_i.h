@@ -1483,8 +1483,8 @@ struct ipa3_stats {
 	u32 flow_disable;
 	u32 tx_non_linear;
 	u32 rx_page_drop_cnt;
-	struct ipa3_page_recycle_stats page_recycle_stats[2];
 	u64 lower_order;
+	struct ipa3_page_recycle_stats page_recycle_stats[2];
 	u32 pipe_setup_fail_cnt;
 	u64 page_recycle_cnt[2][IPA_PAGE_POLL_THRESHOLD_MAX];
 	u64 num_sort_tasklet_sched[3];
