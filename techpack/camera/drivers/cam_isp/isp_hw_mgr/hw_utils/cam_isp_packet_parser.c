@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <media/cam_defs.h>
@@ -119,38 +118,29 @@ static int cam_isp_update_dual_config(
 		(cmd_desc->offset >=
 		(len - sizeof(struct cam_isp_dual_config)))) {
 		CAM_ERR(CAM_ISP, "not enough buffer provided");
-		cam_mem_put_cpu_buf(cmd_desc->mem_handle);
 		return -EINVAL;
 	}
 	remain_len = len - cmd_desc->offset;
 	cpu_addr += (cmd_desc->offset / 4);
 	dual_config = (struct cam_isp_dual_config *)cpu_addr;
 
-	if (dual_config->num_ports > size_isp_out) {
-		CAM_ERR(CAM_ISP, "num_ports %d more than max_vfe_out_res %d",
-			dual_config->num_ports, size_isp_out);
-		cam_mem_put_cpu_buf(cmd_desc->mem_handle);
-		return -EINVAL;
-	}
-
 	if ((dual_config->num_ports *
 		sizeof(struct cam_isp_dual_stripe_config)) >
 		(remain_len - offsetof(struct cam_isp_dual_config, stripes))) {
 		CAM_ERR(CAM_ISP, "not enough buffer for all the dual configs");
-		cam_mem_put_cpu_buf(cmd_desc->mem_handle);
 		return -EINVAL;
 	}
 	for (i = 0; i < dual_config->num_ports; i++) {
 
-		hw_mgr_res = &res_list_isp_out[i];
-		if (!hw_mgr_res) {
+		if (i >= CAM_ISP_IFE_OUT_RES_MAX) {
 			CAM_ERR(CAM_ISP,
-				"Invalid isp out resource i %d num_out_res %d",
-				i, dual_config->num_ports);
+				"failed update for i:%d > size_isp_out:%d",
+				i, size_isp_out);
 			rc = -EINVAL;
 			goto end;
 		}
 
+		hw_mgr_res = &res_list_isp_out[i];
 		for (j = 0; j < CAM_ISP_HW_SPLIT_MAX; j++) {
 			if (!hw_mgr_res->hw_res[j])
 				continue;
@@ -161,8 +151,7 @@ static int cam_isp_update_dual_config(
 			res = hw_mgr_res->hw_res[j];
 
 			if (res->res_id < CAM_ISP_IFE_OUT_RES_BASE ||
-				res->res_id >= (CAM_ISP_IFE_OUT_RES_BASE +
-				size_isp_out))
+				res->res_id >= CAM_ISP_IFE_OUT_RES_MAX)
 				continue;
 
 			outport_id = res->res_id & 0xFF;
@@ -188,7 +177,6 @@ static int cam_isp_update_dual_config(
 	}
 
 end:
-	cam_mem_put_cpu_buf(cmd_desc->mem_handle);
 	return rc;
 }
 
@@ -284,10 +272,6 @@ int cam_isp_add_command_buffers(
 		split_id, prepare->packet->num_cmd_buf);
 
 	for (i = 0; i < prepare->packet->num_cmd_buf; i++) {
-		rc = cam_packet_util_validate_cmd_desc(&cmd_desc[i]);
-		if (rc)
-			return rc;
-
 		num_ent = prepare->num_hw_update_entries;
 		if (!cmd_desc[i].length)
 			continue;
@@ -491,7 +475,7 @@ int cam_isp_add_io_buffers(
 	struct cam_isp_hw_get_cmd_update    update_buf;
 	struct cam_isp_hw_get_wm_update     wm_update;
 	struct cam_isp_hw_get_wm_update     bus_rd_update;
-	struct cam_hw_fence_map_entry      *out_map_entries = NULL;
+	struct cam_hw_fence_map_entry      *out_map_entries;
 	struct cam_hw_fence_map_entry      *in_map_entries;
 	struct cam_isp_hw_get_cmd_update    secure_mode;
 	uint32_t                            kmd_buf_remain_size;
@@ -758,11 +742,6 @@ int cam_isp_add_io_buffers(
 
 			io_cfg_used_bytes += update_buf.cmd.used_bytes;
 
-			if (!out_map_entries) {
-				CAM_ERR(CAM_ISP, "out_map_entries is NULL");
-				rc = -EINVAL;
-				return rc;
-			}
 
 			image_buf_addr =
 				out_map_entries->image_buf_addr;

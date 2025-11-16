@@ -328,6 +328,7 @@ struct cam_cdm_utils_ops *cam_cdm_publish_ops(void);
  */
 int cam_cdm_detect_hang_error(uint32_t handle);
 
+
 /**
  * @brief : API to dump the CDM Debug registers
  *
