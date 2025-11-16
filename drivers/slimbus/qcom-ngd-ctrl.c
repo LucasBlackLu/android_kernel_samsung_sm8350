@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2011-2017, The Linux Foundation. All rights reserved.
 // Copyright (c) 2018, Linaro Limited
-// Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
 
 #include <linux/irq.h>
 #include <linux/kernel.h>
@@ -894,8 +894,6 @@ static int qcom_slim_ngd_xfer_msg(struct slim_controller *sctrl,
 static int qcom_slim_ngd_xfer_msg_sync(struct slim_controller *ctrl,
 				       struct slim_msg_txn *txn)
 {
-	struct qcom_slim_ngd_ctrl *dev =
-		container_of(ctrl, struct qcom_slim_ngd_ctrl, ctrl);
 	int ret, timeout;
 
 	reinit_completion(&dev->sync_done);
