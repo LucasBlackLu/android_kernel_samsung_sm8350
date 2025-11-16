@@ -100,8 +100,6 @@ static struct wcnss_prealloc wcnss_allocs[] = {
 	{0, 128 * 1024, NULL},
 	{0, 128 * 1024, NULL},
 	{0, 128 * 1024, NULL},
-	{0, 128 * 1024, NULL},
-	{0, 128 * 1024, NULL},
 };
 
 int wcnss_prealloc_init(void)
@@ -275,12 +273,12 @@ static ssize_t status_show(struct kobject *kobj, struct kobj_attribute *attr,
 		tsize = tsize / 1024;
 	if (tused)
 		tused = tused / 1024;
-	len += scnprintf(&buf[len], PAGE_SIZE - len,
-			"\nMemory Status:\nTotal Memory: %dKb\n",
-			tsize);
-	len += scnprintf(&buf[len], PAGE_SIZE - len,
-			"Used: %dKb\nFree: %dKb\n", tused,
-			tsize - tused);
+		len += scnprintf(&buf[len], PAGE_SIZE - len,
+				"\nMemory Status:\nTotal Memory: %dKb\n",
+				tsize);
+		len += scnprintf(&buf[len], PAGE_SIZE - len,
+				"Used: %dKb\nFree: %dKb\n", tused,
+				tsize - tused);
 
 	return len;
 }

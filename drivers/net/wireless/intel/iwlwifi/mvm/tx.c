@@ -529,20 +529,16 @@ iwl_mvm_set_tx_params(struct iwl_mvm *mvm, struct sk_buff *skb,
 			flags |= IWL_TX_FLAGS_ENCRYPT_DIS;
 
 		/*
-		 * For data and mgmt packets rate info comes from the fw. Only
-		 * set rate/antenna for injected frames with fixed rate, or
-		 * when no sta is given.
+		 * For data packets rate info comes from the fw. Only
+		 * set rate/antenna during connection establishment or in case
+		 * no station is given.
 		 */
-		if (unlikely(!sta ||
-			     info->control.flags & IEEE80211_TX_CTRL_RATE_INJECT)) {
+		if (!sta || !ieee80211_is_data(hdr->frame_control) ||
+		    mvmsta->sta_state < IEEE80211_STA_AUTHORIZED) {
 			flags |= IWL_TX_FLAGS_CMD_RATE;
 			rate_n_flags =
 				iwl_mvm_get_tx_rate_n_flags(mvm, info, sta,
 							    hdr->frame_control);
-		} else if (!ieee80211_is_data(hdr->frame_control) ||
-			   mvmsta->sta_state < IEEE80211_STA_AUTHORIZED) {
-			/* These are important frames */
-			flags |= IWL_TX_FLAGS_HIGH_PRI;
 		}
 
 		if (mvm->trans->trans_cfg->device_family >=
@@ -1093,9 +1089,6 @@ static int iwl_mvm_tx_mpdu(struct iwl_mvm *mvm, struct sk_buff *skb,
 		return -1;
 
 	if (WARN_ON_ONCE(mvmsta->sta_id == IWL_MVM_INVALID_STA))
-		return -1;
-
-	if (unlikely(ieee80211_is_any_nullfunc(fc)) && sta->he_cap.has_he)
 		return -1;
 
 	if (unlikely(ieee80211_is_probe_resp(fc)))
