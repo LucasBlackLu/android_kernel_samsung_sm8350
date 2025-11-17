@@ -308,6 +308,8 @@ source "drivers/uwb/Kconfig"
 
 source "drivers/uwb/uwb_logger/Kconfig"
 
+source "drivers/vibrator/cs40l2x/Kconfig"
+
 source "drivers/vibrator/common/Kconfig"
 
 source "drivers/vibrator/maxim/Kconfig"
