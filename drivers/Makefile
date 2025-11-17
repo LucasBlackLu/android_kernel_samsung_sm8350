@@ -226,6 +226,7 @@ obj-y += usb/typec/common/
 obj-y += usb/typec/manager/
 obj-y += usb/typec/maxim/
 ifneq ($(filter y, $(CONFIG_SEC_T2Q_PROJECT) $(CONFIG_SEC_P3Q_PROJECT)),)
+obj-y += regulator/s2dos05/
 obj-y += uwb/
 obj-y += uwb/uwb_logger/
 obj-y += vibrator/cs40l2x/
