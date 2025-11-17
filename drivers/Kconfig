@@ -280,6 +280,8 @@ source "drivers/pwm/pwm-gpclk/Kconfig"
 
 source "drivers/regulator/pmic_class/Kconfig"
 
+source "drivers/regulator/s2dos05/Kconfig"
+
 source "drivers/regulator/s2mpb02/Kconfig"
 
 source "drivers/samsung/Kconfig"
