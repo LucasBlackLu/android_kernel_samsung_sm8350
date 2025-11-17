@@ -231,5 +231,8 @@ obj-y += uwb/
 obj-y += uwb/uwb_logger/
 obj-y += vibrator/cs40l2x/
 endif
+ifneq ($(CONFIG_SEC_P3Q_PROJECT),y)
+obj-y += input/wacom/
+endif
 obj-y += vibrator/common/
 obj-y += vibrator/maxim/
