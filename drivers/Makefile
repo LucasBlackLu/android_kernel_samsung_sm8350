@@ -225,5 +225,9 @@ obj-y += sti/abc/
 obj-y += usb/typec/common/
 obj-y += usb/typec/manager/
 obj-y += usb/typec/maxim/
+ifneq ($(filter y, $(CONFIG_SEC_T2Q_PROJECT) $(CONFIG_SEC_P3Q_PROJECT)),)
+obj-y += uwb/
+obj-y += uwb/uwb_logger/
+endif
 obj-y += vibrator/common/
 obj-y += vibrator/maxim/
