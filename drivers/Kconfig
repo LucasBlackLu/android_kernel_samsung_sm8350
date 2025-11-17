@@ -256,6 +256,8 @@ source "drivers/input/sec_input/Kconfig"
 
 source "drivers/input/sec_input/slsi/Kconfig"
 
+source "drivers/input/wacom/Kconfig"
+
 source "drivers/knox/Kconfig"
 
 source "drivers/kperfmon/Kconfig"
