@@ -296,6 +296,8 @@ source "drivers/security/samsung/tzic/Kconfig"
 
 source "drivers/sensors/Kconfig"
 
+source "drivers/sensors/vl53l5/Kconfig"
+
 source "drivers/spu_verify/Kconfig"
 
 source "drivers/sti/abc/Kconfig"
